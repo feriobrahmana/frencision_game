@@ -1,5 +1,17 @@
 const EXTRA_HIT_PAD = 8;
 
+const CATEGORY_LABELS = {
+  PRIVILEGED: 'Privileged',
+  STABLE: 'Stable',
+  STRUGGLING: 'Struggling',
+};
+
+const CATEGORY_ACCENTS = {
+  PRIVILEGED: '#f59e0b',
+  STABLE: '#3b82f6',
+  STRUGGLING: '#ef4444',
+};
+
 export function createRenderer(canvas, state) {
   const ctx = canvas.getContext('2d');
 
@@ -84,20 +96,25 @@ export function createRenderer(canvas, state) {
 
     if (node.id !== state.youId) {
       ctx.lineWidth = 2;
-      ctx.strokeStyle = `rgba(15,23,42,${0.08 + 0.35 * node.friendly})`;
+      ctx.strokeStyle = CATEGORY_ACCENTS[node.category] ?? 'rgba(15,23,42,0.25)';
       ctx.beginPath();
-      ctx.arc(node.x, node.y, radius - 3, -Math.PI * 0.15, Math.PI * 0.5);
+      ctx.arc(node.x, node.y, radius - 3, 0, Math.PI * 2);
       ctx.stroke();
     }
 
     drawBadge(node.x, node.y - radius - 12, String(node.id));
 
-    if (state.showLabels && node.id !== state.youId) {
+    if (state.showLabels) {
       ctx.font = '10px ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillStyle = '#334155';
-      ctx.fillText(`${node.friendly.toFixed(2)} | s:${node.score.toFixed(1)}`, node.x, node.y + radius + 2);
+      if (node.id === state.youId) {
+        ctx.fillText(`s:${node.score.toFixed(1)}`, node.x, node.y + radius + 2);
+      } else {
+        const label = CATEGORY_LABELS[node.category] ?? 'Unassigned';
+        ctx.fillText(`${label} | s:${node.score.toFixed(1)}`, node.x, node.y + radius + 2);
+      }
     }
 
     if (state.picking && node.id === state.hoveredId) {
