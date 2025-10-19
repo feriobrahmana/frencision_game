@@ -19,6 +19,11 @@ export function createState() {
       negativeShock: -1.0,
       negativeShockProb: 0.8,
       purgeThreshold: 1.0,
+      spawnPriors: {
+        PRIVILEGED: 0.2,
+        STABLE: 0.6,
+        STRUGGLING: 0.2,
+      },
     },
     budget: 10,
     auto: null,

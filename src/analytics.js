@@ -4,6 +4,12 @@ export function createAnalyticsStore(onUpdate) {
   const analytics = [];
   const recordMap = new Map();
 
+  const EDGE_KEY_LOOKUP = {
+    PRIVILEGED: 'Privileged',
+    STABLE: 'Stable',
+    STRUGGLING: 'Struggling',
+  };
+
   function ensureRecord(t) {
     if (recordMap.has(t)) return recordMap.get(t);
     const rec = {
@@ -18,6 +24,16 @@ export function createAnalyticsStore(onUpdate) {
       purged: 0,
       shockKind: '',
       shockSource: null,
+      newEdgesByTargetCategory: {
+        Privileged: 0,
+        Stable: 0,
+        Struggling: 0,
+      },
+      categoryMix: {
+        PrivilegedCount: 0,
+        StableCount: 0,
+        StrugglingCount: 0,
+      },
     };
     recordMap.set(t, rec);
     analytics.push(rec);
@@ -69,8 +85,29 @@ export function createAnalyticsStore(onUpdate) {
       rec.degreeGini = 0;
     }
 
+    const mix = {
+      PrivilegedCount: 0,
+      StableCount: 0,
+      StrugglingCount: 0,
+    };
+    for (const node of graph.nodes.values()) {
+      const label = EDGE_KEY_LOOKUP[node.category];
+      if (!label) continue;
+      if (label === 'Privileged') mix.PrivilegedCount += 1;
+      else if (label === 'Stable') mix.StableCount += 1;
+      else if (label === 'Struggling') mix.StrugglingCount += 1;
+    }
+    rec.categoryMix = mix;
+
     if (onUpdate) onUpdate(analytics);
     return rec;
+  }
+
+  function logNewEdge(t, category) {
+    const key = EDGE_KEY_LOOKUP[category];
+    if (!key) return;
+    const rec = ensureRecord(t);
+    rec.newEdgesByTargetCategory[key] += 1;
   }
 
   function reset() {
@@ -92,6 +129,12 @@ export function createAnalyticsStore(onUpdate) {
       'purged',
       'shock_kind',
       'shock_source',
+      'new_edges_target_privileged',
+      'new_edges_target_stable',
+      'new_edges_target_struggling',
+      'category_privileged_count',
+      'category_stable_count',
+      'category_struggling_count',
     ];
     const lines = [header.join(',')];
     for (const r of analytics) {
@@ -107,6 +150,12 @@ export function createAnalyticsStore(onUpdate) {
         r.purged || 0,
         r.shockKind || '',
         r.shockSource == null ? '' : r.shockSource,
+        r.newEdgesByTargetCategory?.Privileged ?? 0,
+        r.newEdgesByTargetCategory?.Stable ?? 0,
+        r.newEdgesByTargetCategory?.Struggling ?? 0,
+        r.categoryMix?.PrivilegedCount ?? 0,
+        r.categoryMix?.StableCount ?? 0,
+        r.categoryMix?.StrugglingCount ?? 0,
       ].join(','));
     }
     return lines.join('\n');
@@ -118,5 +167,6 @@ export function createAnalyticsStore(onUpdate) {
     reset,
     toCSV,
     ensureRecord,
+    logNewEdge,
   };
 }
