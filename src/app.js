@@ -50,14 +50,6 @@ const ATTACH_PROBS = {
 
 const state = createState();
 
-function isValidCategory(category) {
-  return CATEGORY_KEYS.includes(category);
-}
-
-function sampleDefaultCategory() {
-  return sampleFromEntries(CATEGORY_KEYS.map((key) => [key, DEFAULT_SPAWN_PRIORS[key]])) || 'STABLE';
-}
-
 function sampleFromEntries(entries) {
   const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
   if (total <= 0) return entries[entries.length - 1]?.[0] ?? null;
@@ -71,14 +63,14 @@ function sampleFromEntries(entries) {
 
 function sampleCategory(priors) {
   const weights = CATEGORY_KEYS.map((key) => {
-    const raw = priors?.[key];
-    const weight = Number.isFinite(raw) && raw >= 0 ? raw : 0;
+    const weight = Math.max(0, priors?.[key] ?? DEFAULT_SPAWN_PRIORS[key]);
     return [key, weight];
   });
   const total = weights.reduce((sum, [, weight]) => sum + weight, 0);
-  const pick = total > 0 ? sampleFromEntries(weights) : sampleDefaultCategory();
-  if (isValidCategory(pick)) return pick;
-  return sampleDefaultCategory();
+  if (total <= 0) {
+    return sampleFromEntries(CATEGORY_KEYS.map((key) => [key, DEFAULT_SPAWN_PRIORS[key]]));
+  }
+  return sampleFromEntries(weights);
 }
 
 function sampleTargetCategory(sourceCategory) {
@@ -94,14 +86,6 @@ function sampleFallbackCategory(sourceCategory, allowedCategories = CATEGORY_KEY
     .filter(([key, weight]) => key !== NOLINK && allowedCategories.includes(key) && weight > 0);
   if (!entries.length) return null;
   return sampleFromEntries(entries);
-}
-
-function ensureNpcCategory(node, priors = state.params.spawnPriors) {
-  if (!node || node.id === state.youId) return null;
-  if (isValidCategory(node.category)) return node.category;
-  const category = sampleCategory(priors);
-  node.category = category;
-  return category;
 }
 
 // --------- DOM ---------
@@ -248,40 +232,30 @@ function maybeResumeAfterInterlude() {
 }
 
 function spawnNode() {
-  let category = sampleCategory(state.params.spawnPriors);
-  if (!isValidCategory(category)) category = sampleDefaultCategory();
+  const category = sampleCategory(state.params.spawnPriors);
   const id = addNode(state.graph, { category, score: 0 });
   const node = state.graph.nodes.get(id);
-  if (node) {
-    if (!isValidCategory(node.category)) node.category = category;
-    connectNewNode(node);
-  }
+  if (node) connectNewNode(node);
 }
 
 function connectNewNode(node) {
-  const sourceCategory = ensureNpcCategory(node);
-  if (!sourceCategory) return;
-
+  if (!node.category) return;
   const pools = new Map();
-  for (const key of CATEGORY_KEYS) pools.set(key, []);
-
-  for (const candidate of state.graph.nodes.values()) {
-    if (candidate.id === node.id || candidate.id === state.youId) continue;
-    const cat = ensureNpcCategory(candidate);
-    if (cat) {
-      const list = pools.get(cat);
-      if (list) list.push(candidate);
-    }
+  for (const key of CATEGORY_KEYS) {
+    const pool = [...state.graph.nodes.values()].filter(
+      (candidate) => candidate.id !== node.id && candidate.id !== state.youId && candidate.category === key,
+    );
+    pools.set(key, pool);
   }
 
   for (let added = 0; added < state.params.edgesPerNode; added += 1) {
-    let targetCategory = sampleTargetCategory(sourceCategory);
+    let targetCategory = sampleTargetCategory(node.category);
     if (targetCategory === NOLINK) break;
 
     let candidates = pools.get(targetCategory) || [];
     if (!candidates.length) {
       const available = CATEGORY_KEYS.filter((key) => (pools.get(key) || []).length > 0);
-      const fallback = sampleFallbackCategory(sourceCategory, available);
+      const fallback = sampleFallbackCategory(node.category, available);
       if (!fallback) break;
       targetCategory = fallback;
       candidates = pools.get(targetCategory) || [];
@@ -295,8 +269,8 @@ function connectNewNode(node) {
       candidates.filter((candidate) => candidate.id !== target.id),
     );
     const addedEdge = addEdge(state.graph, node.id, target.id);
-    if (addedEdge && targetCategory) {
-      analyticsStore.logNewEdge(state.t, targetCategory);
+    if (addedEdge && target.category) {
+      analyticsStore.logNewEdge(state.t, target.category);
     }
   }
 }
@@ -363,8 +337,7 @@ function tryBefriend(id) {
       return;
     }
     const node = state.graph.nodes.get(id);
-    const category = ensureNpcCategory(node);
-    if (category) analyticsStore.logNewEdge(state.t, category);
+    if (node?.category) analyticsStore.logNewEdge(state.t, node.category);
     state.friends.add(id);
     state.budget -= 1;
     updateStats();
