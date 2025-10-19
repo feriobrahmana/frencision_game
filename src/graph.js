@@ -2,8 +2,8 @@ const edgeKey = (u, v) => (u < v ? `${u}-${v}` : `${v}-${u}`);
 
 const randomCategory = () => {
   const r = Math.random();
-  if (r < 0.15) return 'The Privileged';
-  if (r < 0.55) return 'The Stable';
+  if (r < 0.05) return 'The Privileged';
+  if (r < 0.65) return 'The Stable';
   return 'The Poor';
 };
 
@@ -20,7 +20,7 @@ export function addNode(
   { friendly = Math.random(), type = 'normal', score = 0, category } = {},
 ) {
   const id = graph.nextId++;
-  const nodeCategory = category ?? randomCategory();
+  const nodeCategory = type === 'you' ? category : category ?? randomCategory();
   graph.nodes.set(id, { id, x: 0, y: 0, friendly, type, score, category: nodeCategory });
   return id;
 }

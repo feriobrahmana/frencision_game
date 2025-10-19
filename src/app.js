@@ -84,7 +84,7 @@ function updateStats() {
   elNodes.textContent = `Nodes: ${state.graph.nodes.size}`;
   elFr.textContent = `Friends: ${state.friends.size} / ${state.params.budgetMax} (left ${state.budget})`;
   if (you) {
-    elScore.textContent = `YOU score: ${you.score.toFixed(1)} | f=${you.friendly.toFixed(2)} | ${you.category}`;
+    elScore.textContent = `YOU score: ${you.score.toFixed(1)} | f=${you.friendly.toFixed(2)}`;
   } else {
     elScore.textContent = 'YOU score: -';
   }

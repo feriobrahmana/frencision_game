@@ -92,7 +92,7 @@ export function createRenderer(canvas, state) {
 
     drawBadge(node.x, node.y - radius - 12, String(node.id));
 
-    if (state.showLabels) {
+    if (state.showLabels && node.id !== state.youId) {
       ctx.font = '10px ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
