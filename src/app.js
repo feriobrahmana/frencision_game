@@ -1,4 +1,4 @@
-import { rndInt, clamp, choice, rand } from './helpers.js';
+import { rndInt, clamp, choice } from './helpers.js';
 import { createState, resetState } from './state.js';
 import { addNode, addEdge, removeNode, neighbors } from './graph.js';
 import { layoutGraph } from './layout.js';
@@ -6,7 +6,104 @@ import { createRenderer } from './rendering.js';
 import { createAnalyticsStore } from './analytics.js';
 import { createCharts } from './charts.js';
 
+const CATEGORY_KEYS = ['PRIVILEGED', 'STABLE', 'STRUGGLING'];
+const CATEGORY_LABELS = {
+  PRIVILEGED: 'Privileged',
+  STABLE: 'Stable',
+  STRUGGLING: 'Struggling',
+};
+
+const CATEGORY_SORT_ORDER = {
+  PRIVILEGED: 0,
+  STABLE: 1,
+  STRUGGLING: 2,
+};
+
+const DEFAULT_SPAWN_PRIORS = {
+  PRIVILEGED: 0.2,
+  STABLE: 0.6,
+  STRUGGLING: 0.2,
+};
+
+const NOLINK = 'NOLINK';
+
+const ATTACH_PROBS = {
+  PRIVILEGED: {
+    PRIVILEGED: 0.6,
+    STABLE: 0.2,
+    STRUGGLING: 0.1,
+    [NOLINK]: 0.1,
+  },
+  STABLE: {
+    PRIVILEGED: 0.2,
+    STABLE: 0.5,
+    STRUGGLING: 0.2,
+    [NOLINK]: 0.1,
+  },
+  STRUGGLING: {
+    PRIVILEGED: 0.05,
+    STABLE: 0.1,
+    STRUGGLING: 0.6,
+    [NOLINK]: 0.25,
+  },
+};
+
 const state = createState();
+
+function isValidCategory(category) {
+  return CATEGORY_KEYS.includes(category);
+}
+
+function normalizeSpawnPriors(priors) {
+  const clean = {};
+  let total = 0;
+  for (const key of CATEGORY_KEYS) {
+    const raw = priors?.[key];
+    const weight = Number.isFinite(raw) && raw > 0 ? raw : 0;
+    clean[key] = weight;
+    total += weight;
+  }
+  if (total <= 0) return { ...DEFAULT_SPAWN_PRIORS };
+  const normalized = {};
+  for (const key of CATEGORY_KEYS) normalized[key] = clean[key] / total;
+  return normalized;
+}
+
+function sampleFromEntries(entries) {
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+  if (total <= 0) return entries[entries.length - 1]?.[0] ?? null;
+  let r = Math.random() * total;
+  for (const [value, weight] of entries) {
+    r -= weight;
+    if (r <= 0) return value;
+  }
+  return entries[entries.length - 1]?.[0] ?? null;
+}
+
+function sampleCategory(priors) {
+  const normalized = normalizeSpawnPriors(priors);
+  const entries = CATEGORY_KEYS.map((key) => [key, normalized[key]]);
+  const pick = sampleFromEntries(entries);
+  if (isValidCategory(pick)) return pick;
+  return CATEGORY_KEYS[0];
+}
+
+function sampleTargetCategory(sourceCategory) {
+  const map = ATTACH_PROBS[sourceCategory];
+  if (!map) return NOLINK;
+  return sampleFromEntries(Object.entries(map));
+}
+
+function sampleFallbackCategory(sourceCategory, allowedCategories) {
+  if (!allowedCategories?.length) return null;
+  const map = ATTACH_PROBS[sourceCategory];
+  if (!map) return null;
+  const entries = allowedCategories
+    .map((key) => [key, map[key] ?? 0])
+    .filter(([, weight]) => weight > 0);
+  if (!entries.length) return null;
+  return sampleFromEntries(entries);
+}
 
 // --------- DOM ---------
 const elZ = document.getElementById('zMax');
@@ -29,6 +126,9 @@ const elPPos = document.getElementById('pPosVal');
 const elNNeg = document.getElementById('nNegVal');
 const elPNeg = document.getElementById('negProb');
 const elDThr = document.getElementById('dThreshold');
+const elSpawnPriv = document.getElementById('spawnPriv');
+const elSpawnStable = document.getElementById('spawnStable');
+const elSpawnStrug = document.getElementById('spawnStrug');
 
 const btnStart = document.getElementById('btnStart');
 const btnStep = document.getElementById('btnStep');
@@ -61,21 +161,17 @@ const analyticsStore = createAnalyticsStore(charts.draw);
 const renderer = createRenderer(canvas, state);
 
 // --------- Helpers ---------
-function weightedPick(items, weightFn) {
-  const weights = items.map(weightFn);
-  const sum = weights.reduce((a, b) => a + b, 0);
-  let r = Math.random() * sum;
-  for (let i = 0; i < items.length; i += 1) {
-    r -= weights[i];
-    if (r <= 0) return items[i];
-  }
-  return items[items.length - 1];
-}
-
 function setStatus(msg) {
   const text = `Status: ${msg}`;
   elStatus.textContent = text;
   elStatusBar.textContent = text;
+}
+
+function updateSpawnInputsFromState() {
+  if (!elSpawnPriv || !elSpawnStable || !elSpawnStrug) return;
+  elSpawnPriv.value = state.params.spawnPriors.PRIVILEGED.toFixed(2);
+  elSpawnStable.value = state.params.spawnPriors.STABLE.toFixed(2);
+  elSpawnStrug.value = state.params.spawnPriors.STRUGGLING.toFixed(2);
 }
 
 function updateStats() {
@@ -111,8 +207,23 @@ function syncParamsFromUI() {
   state.params.negativeShockProb = clamp(toNum(elPNeg, state.params.negativeShockProb), 0, 1);
   state.params.purgeThreshold = toNum(elDThr, state.params.purgeThreshold);
 
+  const toPrior = (el, fallback) => {
+    const v = Number.parseFloat(el.value);
+    if (!Number.isFinite(v) || v < 0) return fallback;
+    return v;
+  };
+
+  const rawPriors = {
+    PRIVILEGED: toPrior(elSpawnPriv, state.params.spawnPriors.PRIVILEGED),
+    STABLE: toPrior(elSpawnStable, state.params.spawnPriors.STABLE),
+    STRUGGLING: toPrior(elSpawnStrug, state.params.spawnPriors.STRUGGLING),
+  };
+  state.params.spawnPriors = normalizeSpawnPriors(rawPriors);
+
   state.showLabels = chkLabels.checked;
   state.allowYouAsSource = chkYouSrc.checked;
+
+  updateSpawnInputsFromState();
 }
 
 function pauseForInterlude() {
@@ -129,23 +240,65 @@ function maybeResumeAfterInterlude() {
   }
 }
 
-function growth() {
-  const spawns = rndInt(0, state.params.zMax);
-  for (let i = 0; i < spawns; i += 1) {
-    const id = addNode(state.graph, { friendly: Math.random(), score: 0 });
-    connectByFriendliness(id, state.params.edgesPerNode);
+function spawnNode() {
+  const category = sampleCategory(state.params.spawnPriors);
+  const id = addNode(state.graph, { category, score: 0 });
+  const node = state.graph.nodes.get(id);
+  if (!node) return;
+  node.category = category;
+  connectNewNode(node);
+}
+
+function connectNewNode(node) {
+  if (!node || node.id === state.youId) return;
+  const sourceCategory = node.category;
+  if (!isValidCategory(sourceCategory)) return;
+
+  const buckets = new Map();
+  for (const key of CATEGORY_KEYS) buckets.set(key, []);
+
+  for (const candidate of state.graph.nodes.values()) {
+    if (candidate.id === node.id || candidate.id === state.youId) continue;
+    if (!isValidCategory(candidate.category)) continue;
+    const list = buckets.get(candidate.category);
+    if (list) list.push(candidate);
+  }
+
+  for (let added = 0; added < state.params.edgesPerNode; added += 1) {
+    let targetCategory = sampleTargetCategory(sourceCategory);
+    if (!targetCategory || targetCategory === NOLINK) break;
+
+    let candidates = buckets.get(targetCategory) || [];
+    if (!candidates.length) {
+      const available = CATEGORY_KEYS.filter((key) => (buckets.get(key) || []).length > 0);
+      if (!available.length) break;
+      targetCategory = sampleFallbackCategory(sourceCategory, available);
+      if (!targetCategory) break;
+      candidates = buckets.get(targetCategory) || [];
+      if (!candidates.length) break;
+    }
+
+    const target = choice(candidates);
+    if (!target) break;
+
+    const addedEdge = addEdge(state.graph, node.id, target.id);
+    buckets.set(
+      targetCategory,
+      candidates.filter((candidate) => candidate.id !== target.id),
+    );
+
+    if (!addedEdge) {
+      added -= 1;
+      continue;
+    }
+
+    analyticsStore.logNewEdge(state.t, targetCategory);
   }
 }
 
-function connectByFriendliness(newId, edges) {
-  const candidates = [...state.graph.nodes.values()].filter((node) => node.id !== newId && node.id !== state.youId);
-  if (!candidates.length) return;
-  let remaining = new Set(candidates.map((node) => node.id));
-  for (let added = 0; added < edges && remaining.size > 0; added += 1) {
-    const pick = weightedPick([...remaining].map((id) => state.graph.nodes.get(id)), (node) => Math.max(node.friendly, 1e-6));
-    addEdge(state.graph, newId, pick.id);
-    remaining.delete(pick.id);
-  }
+function growth() {
+  const spawns = rndInt(0, state.params.zMax);
+  for (let i = 0; i < spawns; i += 1) spawnNode();
 }
 
 function bfsWithin(start, maxHops) {
@@ -170,11 +323,21 @@ function populatePickList() {
   selPick.innerHTML = '';
   const candidates = [...state.graph.nodes.values()].filter((node) => node.id !== state.youId && !state.friends.has(node.id));
   const degree = (id) => neighbors(state.graph, id).length;
-  candidates.sort((a, b) => b.friendly - a.friendly || b.score - a.score || degree(b.id) - degree(a.id));
+  candidates.sort((a, b) => {
+    const scoreDiff = b.score - a.score;
+    if (Math.abs(scoreDiff) > 1e-9) return scoreDiff;
+    const aOrder = CATEGORY_SORT_ORDER[a.category] ?? Number.MAX_SAFE_INTEGER;
+    const bOrder = CATEGORY_SORT_ORDER[b.category] ?? Number.MAX_SAFE_INTEGER;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    const degreeDiff = degree(b.id) - degree(a.id);
+    if (degreeDiff !== 0) return degreeDiff;
+    return a.id - b.id;
+  });
   for (const node of candidates) {
     const option = document.createElement('option');
     option.value = String(node.id);
-    option.textContent = `#${node.id} • f=${node.friendly.toFixed(2)} • s=${node.score.toFixed(1)} • deg=${degree(node.id)}`;
+    const label = CATEGORY_LABELS[node.category] ?? 'Unassigned';
+    option.textContent = `#${node.id} • ${label} • s=${node.score.toFixed(1)} • deg=${degree(node.id)}`;
     selPick.appendChild(option);
   }
 }
@@ -188,7 +351,13 @@ function clearPickList() {
 function tryBefriend(id) {
   if (id === state.youId || state.friends.has(id)) return;
   if (state.budget > 0) {
-    addEdge(state.graph, state.youId, id);
+    const added = addEdge(state.graph, state.youId, id);
+    if (!added) {
+      setStatus(`Already connected to node ${id}.`);
+      return;
+    }
+    const node = state.graph.nodes.get(id);
+    if (node && isValidCategory(node.category)) analyticsStore.logNewEdge(state.t, node.category);
     state.friends.add(id);
     state.budget -= 1;
     updateStats();
@@ -347,10 +516,10 @@ function tick() {
 function startGame() {
   syncParamsFromUI();
   resetGame();
-  addNode(state.graph, { friendly: 0.5, type: 'you', score: 0 });
-  addNode(state.graph, { friendly: rand(), score: 0 });
-  addNode(state.graph, { friendly: rand(), score: 0 });
-  addNode(state.graph, { friendly: rand(), score: 0 });
+  addNode(state.graph, { type: 'you', score: 0 });
+  spawnNode();
+  spawnNode();
+  spawnNode();
   layoutGraph(state.graph, state.youId);
   updateStats();
   renderer.draw();
@@ -465,6 +634,14 @@ elPNeg.onchange = () => {
 elDThr.onchange = () => {
   state.params.purgeThreshold = parseFloat(elDThr.value || state.params.purgeThreshold);
 };
+
+const handleSpawnPriorChange = () => {
+  syncParamsFromUI();
+};
+
+if (elSpawnPriv) elSpawnPriv.onchange = handleSpawnPriorChange;
+if (elSpawnStable) elSpawnStable.onchange = handleSpawnPriorChange;
+if (elSpawnStrug) elSpawnStrug.onchange = handleSpawnPriorChange;
 
 chkLabels.onchange = () => {
   state.showLabels = chkLabels.checked;
