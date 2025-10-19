@@ -8,9 +8,11 @@ export function createGraph() {
   };
 }
 
-export function addNode(graph, { friendly = Math.random(), type = 'normal', score = 0 } = {}) {
+export function addNode(graph, { category = null, type = 'normal', score = 0 } = {}) {
   const id = graph.nextId++;
-  graph.nodes.set(id, { id, x: 0, y: 0, friendly, type, score });
+  const node = { id, x: 0, y: 0, type, score };
+  if (category) node.category = category;
+  graph.nodes.set(id, node);
   return id;
 }
 
