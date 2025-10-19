@@ -50,25 +50,6 @@ const ATTACH_PROBS = {
 
 const state = createState();
 
-function isValidCategory(category) {
-  return CATEGORY_KEYS.includes(category);
-}
-
-function normalizeSpawnPriors(priors) {
-  const clean = {};
-  let total = 0;
-  for (const key of CATEGORY_KEYS) {
-    const raw = priors?.[key];
-    const weight = Number.isFinite(raw) && raw > 0 ? raw : 0;
-    clean[key] = weight;
-    total += weight;
-  }
-  if (total <= 0) return { ...DEFAULT_SPAWN_PRIORS };
-  const normalized = {};
-  for (const key of CATEGORY_KEYS) normalized[key] = clean[key] / total;
-  return normalized;
-}
-
 function sampleFromEntries(entries) {
   const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
   if (total <= 0) return entries[entries.length - 1]?.[0] ?? null;
@@ -81,11 +62,15 @@ function sampleFromEntries(entries) {
 }
 
 function sampleCategory(priors) {
-  const normalized = normalizeSpawnPriors(priors);
-  const entries = CATEGORY_KEYS.map((key) => [key, normalized[key]]);
-  const pick = sampleFromEntries(entries);
-  if (isValidCategory(pick)) return pick;
-  return CATEGORY_KEYS[0];
+  const weights = CATEGORY_KEYS.map((key) => {
+    const weight = Math.max(0, priors?.[key] ?? DEFAULT_SPAWN_PRIORS[key]);
+    return [key, weight];
+  });
+  const total = weights.reduce((sum, [, weight]) => sum + weight, 0);
+  if (total <= 0) {
+    return sampleFromEntries(CATEGORY_KEYS.map((key) => [key, DEFAULT_SPAWN_PRIORS[key]]));
+  }
+  return sampleFromEntries(weights);
 }
 
 function sampleTargetCategory(sourceCategory) {
@@ -94,13 +79,11 @@ function sampleTargetCategory(sourceCategory) {
   return sampleFromEntries(Object.entries(map));
 }
 
-function sampleFallbackCategory(sourceCategory, allowedCategories) {
-  if (!allowedCategories?.length) return null;
+function sampleFallbackCategory(sourceCategory, allowedCategories = CATEGORY_KEYS) {
   const map = ATTACH_PROBS[sourceCategory];
   if (!map) return null;
-  const entries = allowedCategories
-    .map((key) => [key, map[key] ?? 0])
-    .filter(([, weight]) => weight > 0);
+  const entries = Object.entries(map)
+    .filter(([key, weight]) => key !== NOLINK && allowedCategories.includes(key) && weight > 0);
   if (!entries.length) return null;
   return sampleFromEntries(entries);
 }
@@ -175,6 +158,7 @@ function updateSpawnInputsFromState() {
 }
 
 function updateStats() {
+  for (const node of state.graph.nodes.values()) ensureNpcCategory(node);
   const you = state.graph.nodes.get(state.youId);
   elStep.textContent = `t = ${state.t}`;
   elNodes.textContent = `Nodes: ${state.graph.nodes.size}`;
@@ -218,7 +202,14 @@ function syncParamsFromUI() {
     STABLE: toPrior(elSpawnStable, state.params.spawnPriors.STABLE),
     STRUGGLING: toPrior(elSpawnStrug, state.params.spawnPriors.STRUGGLING),
   };
-  state.params.spawnPriors = normalizeSpawnPriors(rawPriors);
+  const total = rawPriors.PRIVILEGED + rawPriors.STABLE + rawPriors.STRUGGLING;
+  if (total > 0) {
+    state.params.spawnPriors = {
+      PRIVILEGED: rawPriors.PRIVILEGED / total,
+      STABLE: rawPriors.STABLE / total,
+      STRUGGLING: rawPriors.STRUGGLING / total,
+    };
+  }
 
   state.showLabels = chkLabels.checked;
   state.allowYouAsSource = chkYouSrc.checked;
@@ -244,55 +235,43 @@ function spawnNode() {
   const category = sampleCategory(state.params.spawnPriors);
   const id = addNode(state.graph, { category, score: 0 });
   const node = state.graph.nodes.get(id);
-  if (!node) return;
-  node.category = category;
-  connectNewNode(node);
+  if (node) connectNewNode(node);
 }
 
 function connectNewNode(node) {
-  if (!node || node.id === state.youId) return;
-  const sourceCategory = node.category;
-  if (!isValidCategory(sourceCategory)) return;
-
-  const buckets = new Map();
-  for (const key of CATEGORY_KEYS) buckets.set(key, []);
-
-  for (const candidate of state.graph.nodes.values()) {
-    if (candidate.id === node.id || candidate.id === state.youId) continue;
-    if (!isValidCategory(candidate.category)) continue;
-    const list = buckets.get(candidate.category);
-    if (list) list.push(candidate);
+  if (!node.category) return;
+  const pools = new Map();
+  for (const key of CATEGORY_KEYS) {
+    const pool = [...state.graph.nodes.values()].filter(
+      (candidate) => candidate.id !== node.id && candidate.id !== state.youId && candidate.category === key,
+    );
+    pools.set(key, pool);
   }
 
   for (let added = 0; added < state.params.edgesPerNode; added += 1) {
-    let targetCategory = sampleTargetCategory(sourceCategory);
-    if (!targetCategory || targetCategory === NOLINK) break;
+    let targetCategory = sampleTargetCategory(node.category);
+    if (targetCategory === NOLINK) break;
 
-    let candidates = buckets.get(targetCategory) || [];
+    let candidates = pools.get(targetCategory) || [];
     if (!candidates.length) {
-      const available = CATEGORY_KEYS.filter((key) => (buckets.get(key) || []).length > 0);
-      if (!available.length) break;
-      targetCategory = sampleFallbackCategory(sourceCategory, available);
-      if (!targetCategory) break;
-      candidates = buckets.get(targetCategory) || [];
+      const available = CATEGORY_KEYS.filter((key) => (pools.get(key) || []).length > 0);
+      const fallback = sampleFallbackCategory(node.category, available);
+      if (!fallback) break;
+      targetCategory = fallback;
+      candidates = pools.get(targetCategory) || [];
       if (!candidates.length) break;
     }
 
     const target = choice(candidates);
     if (!target) break;
-
-    const addedEdge = addEdge(state.graph, node.id, target.id);
-    buckets.set(
+    pools.set(
       targetCategory,
       candidates.filter((candidate) => candidate.id !== target.id),
     );
-
-    if (!addedEdge) {
-      added -= 1;
-      continue;
+    const addedEdge = addEdge(state.graph, node.id, target.id);
+    if (addedEdge && target.category) {
+      analyticsStore.logNewEdge(state.t, target.category);
     }
-
-    analyticsStore.logNewEdge(state.t, targetCategory);
   }
 }
 
@@ -322,6 +301,7 @@ function populatePickList() {
   btnPickFromList.disabled = false;
   selPick.innerHTML = '';
   const candidates = [...state.graph.nodes.values()].filter((node) => node.id !== state.youId && !state.friends.has(node.id));
+  for (const node of candidates) ensureNpcCategory(node);
   const degree = (id) => neighbors(state.graph, id).length;
   candidates.sort((a, b) => {
     const scoreDiff = b.score - a.score;
@@ -357,7 +337,7 @@ function tryBefriend(id) {
       return;
     }
     const node = state.graph.nodes.get(id);
-    if (node && isValidCategory(node.category)) analyticsStore.logNewEdge(state.t, node.category);
+    if (node?.category) analyticsStore.logNewEdge(state.t, node.category);
     state.friends.add(id);
     state.budget -= 1;
     updateStats();
