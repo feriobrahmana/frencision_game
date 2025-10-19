@@ -92,12 +92,18 @@ export function createRenderer(canvas, state) {
 
     drawBadge(node.x, node.y - radius - 12, String(node.id));
 
-    if (state.showLabels && node.id !== state.youId) {
+    if (state.showLabels) {
       ctx.font = '10px ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillStyle = '#334155';
-      ctx.fillText(`${node.friendly.toFixed(2)} | s:${node.score.toFixed(1)}`, node.x, node.y + radius + 2);
+      const lines = [
+        node.category || 'Unknown',
+        `f:${node.friendly.toFixed(2)} | s:${node.score.toFixed(1)}`,
+      ];
+      for (let i = 0; i < lines.length; i += 1) {
+        ctx.fillText(lines[i], node.x, node.y + radius + 2 + i * 12);
+      }
     }
 
     if (state.picking && node.id === state.hoveredId) {

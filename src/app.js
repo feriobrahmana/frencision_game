@@ -83,7 +83,11 @@ function updateStats() {
   elStep.textContent = `t = ${state.t}`;
   elNodes.textContent = `Nodes: ${state.graph.nodes.size}`;
   elFr.textContent = `Friends: ${state.friends.size} / ${state.params.budgetMax} (left ${state.budget})`;
-  elScore.textContent = `YOU score: ${you ? you.score.toFixed(1) : '-'}`;
+  if (you) {
+    elScore.textContent = `YOU score: ${you.score.toFixed(1)} | f=${you.friendly.toFixed(2)} | ${you.category}`;
+  } else {
+    elScore.textContent = 'YOU score: -';
+  }
 }
 
 function enablePlayControls(enabled) {
@@ -174,7 +178,7 @@ function populatePickList() {
   for (const node of candidates) {
     const option = document.createElement('option');
     option.value = String(node.id);
-    option.textContent = `#${node.id} • f=${node.friendly.toFixed(2)} • s=${node.score.toFixed(1)} • deg=${degree(node.id)}`;
+    option.textContent = `#${node.id} | ${node.category} | f=${node.friendly.toFixed(2)} | s=${node.score.toFixed(1)} | deg=${degree(node.id)}`;
     selPick.appendChild(option);
   }
 }
@@ -498,3 +502,4 @@ function initialResize() {
 
 syncParamsFromUI();
 initialResize();
+

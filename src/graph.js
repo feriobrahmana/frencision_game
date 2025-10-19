@@ -1,5 +1,12 @@
 const edgeKey = (u, v) => (u < v ? `${u}-${v}` : `${v}-${u}`);
 
+const randomCategory = () => {
+  const r = Math.random();
+  if (r < 0.15) return 'The Privileged';
+  if (r < 0.55) return 'The Stable';
+  return 'The Poor';
+};
+
 export function createGraph() {
   return {
     nodes: new Map(),
@@ -8,9 +15,13 @@ export function createGraph() {
   };
 }
 
-export function addNode(graph, { friendly = Math.random(), type = 'normal', score = 0 } = {}) {
+export function addNode(
+  graph,
+  { friendly = Math.random(), type = 'normal', score = 0, category } = {},
+) {
   const id = graph.nextId++;
-  graph.nodes.set(id, { id, x: 0, y: 0, friendly, type, score });
+  const nodeCategory = category ?? randomCategory();
+  graph.nodes.set(id, { id, x: 0, y: 0, friendly, type, score, category: nodeCategory });
   return id;
 }
 
