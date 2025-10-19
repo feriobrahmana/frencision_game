@@ -158,6 +158,7 @@ function updateSpawnInputsFromState() {
 }
 
 function updateStats() {
+  for (const node of state.graph.nodes.values()) ensureNpcCategory(node);
   const you = state.graph.nodes.get(state.youId);
   elStep.textContent = `t = ${state.t}`;
   elNodes.textContent = `Nodes: ${state.graph.nodes.size}`;
@@ -300,6 +301,7 @@ function populatePickList() {
   btnPickFromList.disabled = false;
   selPick.innerHTML = '';
   const candidates = [...state.graph.nodes.values()].filter((node) => node.id !== state.youId && !state.friends.has(node.id));
+  for (const node of candidates) ensureNpcCategory(node);
   const degree = (id) => neighbors(state.graph, id).length;
   candidates.sort((a, b) => {
     const scoreDiff = b.score - a.score;
