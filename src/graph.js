@@ -33,6 +33,12 @@ export function addEdge(graph, u, v) {
   return true;
 }
 
+export function hasEdge(graph, u, v) {
+  if (u === v) return false;
+  const key = edgeKey(u, v);
+  return graph.edges.has(key);
+}
+
 export function removeNode(graph, id) {
   if (!graph.nodes.has(id)) return { removed: false, neighbors: [] };
   const toDelete = [];

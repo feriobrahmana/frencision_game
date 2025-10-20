@@ -20,6 +20,7 @@ export function createState() {
       negativeShockProb: 0.8,
       purgeThreshold: 1.0,
     },
+    youCaste: 'The Stable',
     budget: 10,
     auto: null,
     gameOver: false,
@@ -40,6 +41,7 @@ export function resetState(state) {
   state.friends.clear();
   state.t = 0;
   state.budget = state.params.budgetMax;
+  state.youCaste = 'The Stable';
   state.auto = null;
   state.gameOver = false;
   state.picking = false;

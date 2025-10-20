@@ -1,6 +1,6 @@
 import { rndInt, clamp, choice, rand } from './helpers.js';
 import { createState, resetState } from './state.js';
-import { addNode, addEdge, removeNode, neighbors } from './graph.js';
+import { addNode, addEdge, removeNode, neighbors, hasEdge } from './graph.js';
 import { layoutGraph } from './layout.js';
 import { createRenderer } from './rendering.js';
 import { createAnalyticsStore } from './analytics.js';
@@ -60,6 +60,36 @@ const charts = createCharts({
 const analyticsStore = createAnalyticsStore(charts.draw);
 const renderer = createRenderer(canvas, state);
 
+const CASTE_LIST = ['The Privileged', 'The Stable', 'The Poor'];
+const CASTE_PRIORITY = {
+  'The Poor': 0,
+  'The Stable': 1,
+  'The Privileged': 2,
+};
+const CASTE_RULES = {
+  'The Privileged': {
+    makeProb: 0.7,
+    weights: {
+      'The Privileged': 0.65,
+      'The Stable': 0.25,
+      'The Poor': 0.1,
+    },
+  },
+  'The Stable': {
+    makeProb: 0.5,
+    weights: {
+      'The Stable': 0.7,
+      'The Poor': 0.3,
+    },
+  },
+  'The Poor': {
+    makeProb: 0.4,
+    weights: {
+      'The Poor': 1,
+    },
+  },
+};
+
 // --------- Helpers ---------
 function weightedPick(items, weightFn) {
   const weights = items.map(weightFn);
@@ -80,11 +110,12 @@ function setStatus(msg) {
 
 function updateStats() {
   const you = state.graph.nodes.get(state.youId);
+  const totalFriends = neighbors(state.graph, state.youId).length;
   elStep.textContent = `t = ${state.t}`;
   elNodes.textContent = `Nodes: ${state.graph.nodes.size}`;
-  elFr.textContent = `Friends: ${state.friends.size} / ${state.params.budgetMax} (left ${state.budget})`;
+  elFr.textContent = `Friends: ${totalFriends} (budget left ${state.budget})`;
   if (you) {
-    elScore.textContent = `YOU score: ${you.score.toFixed(1)} | f=${you.friendly.toFixed(2)}`;
+    elScore.textContent = `YOU score: ${you.score.toFixed(1)} | f=${you.friendly.toFixed(2)} | caste=${state.youCaste}`;
   } else {
     elScore.textContent = 'YOU score: -';
   }
@@ -104,7 +135,7 @@ function syncParamsFromUI() {
   };
 
   state.params.zMax = toInt(elZ, 0, 10, state.params.zMax);
-  state.params.edgesPerNode = toInt(elE, 1, 5, state.params.edgesPerNode);
+  state.params.edgesPerNode = toInt(elE, 0, 5, state.params.edgesPerNode);
   state.params.pickPeriod = toInt(elK, 1, 20, state.params.pickPeriod);
   state.params.shockPeriod = toInt(elN, 2, 30, state.params.shockPeriod);
   state.params.purgePeriod = toInt(elP, 2, 30, state.params.purgePeriod);
@@ -135,20 +166,151 @@ function maybeResumeAfterInterlude() {
 
 function growth() {
   const spawns = rndInt(0, state.params.zMax);
+  const newcomers = [];
   for (let i = 0; i < spawns; i += 1) {
     const id = addNode(state.graph, { friendly: Math.random(), score: 0 });
-    connectByFriendliness(id, state.params.edgesPerNode);
+    newcomers.push(id);
   }
+  return newcomers;
 }
 
-function connectByFriendliness(newId, edges) {
-  const candidates = [...state.graph.nodes.values()].filter((node) => node.id !== newId && node.id !== state.youId);
-  if (!candidates.length) return;
-  let remaining = new Set(candidates.map((node) => node.id));
-  for (let added = 0; added < edges && remaining.size > 0; added += 1) {
-    const pick = weightedPick([...remaining].map((id) => state.graph.nodes.get(id)), (node) => Math.max(node.friendly, 1e-6));
-    addEdge(state.graph, newId, pick.id);
-    remaining.delete(pick.id);
+function nodesWithinDistance(graph, startId, maxDistance) {
+  const visited = new Set([startId]);
+  const reachable = new Set();
+  const queue = [{ id: startId, d: 0 }];
+  while (queue.length) {
+    const { id, d } = queue.shift();
+    if (d === maxDistance) continue;
+    for (const nb of neighbors(graph, id)) {
+      if (visited.has(nb)) continue;
+      visited.add(nb);
+      reachable.add(nb);
+      queue.push({ id: nb, d: d + 1 });
+    }
+  }
+  reachable.delete(startId);
+  return reachable;
+}
+
+function recomputeYouCaste() {
+  const youNode = state.graph.nodes.get(state.youId);
+  if (!youNode) return;
+  const counts = {
+    'The Privileged': 0,
+    'The Stable': 0,
+    'The Poor': 0,
+  };
+  let total = 0;
+  for (const id of neighbors(state.graph, state.youId)) {
+    const node = state.graph.nodes.get(id);
+    if (!node || !counts.hasOwnProperty(node.category)) continue;
+    counts[node.category] += 1;
+    total += 1;
+  }
+  if (total === 0) {
+    const fallback = state.youCaste || 'The Stable';
+    state.youCaste = fallback;
+    youNode.category = fallback;
+    return;
+  }
+  let bestCaste = state.youCaste || 'The Stable';
+  let bestCount = -1;
+  let bestPriority = Infinity;
+  for (const caste of CASTE_LIST) {
+    const count = counts[caste] ?? 0;
+    const priority = CASTE_PRIORITY[caste] ?? Infinity;
+    if (count > bestCount || (count === bestCount && priority < bestPriority)) {
+      bestCaste = caste;
+      bestCount = count;
+      bestPriority = priority;
+    }
+  }
+  state.youCaste = bestCaste;
+  youNode.category = bestCaste;
+}
+
+function runCasteConnections(newcomerIds) {
+  const maxEdges = state.params.edgesPerNode;
+  if (maxEdges <= 0) return;
+
+  const newcomerSet = new Set(newcomerIds);
+  const newcomersByCaste = new Map();
+  for (const id of newcomerIds) {
+    const node = state.graph.nodes.get(id);
+    if (!node) continue;
+    if (!newcomersByCaste.has(node.category)) newcomersByCaste.set(node.category, []);
+    newcomersByCaste.get(node.category).push(id);
+  }
+
+  const nodes = [...state.graph.nodes.values()];
+  for (const node of nodes) {
+    if (node.id === state.youId) continue;
+    const rule = CASTE_RULES[node.category];
+    if (!rule || rule.makeProb <= 0) continue;
+    if (Math.random() >= rule.makeProb) continue;
+
+    const desiredEdges = rndInt(1, maxEdges);
+    let created = 0;
+    while (created < desiredEdges) {
+      const candidatesByCaste = new Map();
+      const availableCastes = [];
+      const withinTwo = nodesWithinDistance(state.graph, node.id, 2);
+      const sourceIsNewcomer = newcomerSet.has(node.id);
+
+      for (const caste of CASTE_LIST) {
+        const weight = rule.weights[caste] || 0;
+        if (weight <= 0) continue;
+        const targets = new Set();
+
+        const ofCaste = newcomersByCaste.get(caste) || [];
+        for (const targetId of ofCaste) {
+          if (targetId === node.id) continue;
+          if (hasEdge(state.graph, node.id, targetId)) continue;
+          targets.add(targetId);
+        }
+
+        for (const reachId of withinTwo) {
+          if (reachId === node.id) continue;
+          if (hasEdge(state.graph, node.id, reachId)) continue;
+          const targetNode = state.graph.nodes.get(reachId);
+          if (!targetNode || targetNode.category !== caste) continue;
+          if (sourceIsNewcomer && reachId === state.youId) continue;
+          targets.add(reachId);
+        }
+
+        if (sourceIsNewcomer) targets.delete(state.youId);
+
+        if (targets.size > 0) {
+          availableCastes.push({ caste, weight });
+          candidatesByCaste.set(caste, [...targets]);
+        }
+      }
+
+      if (!availableCastes.length) break;
+
+      const chosen = weightedPick(availableCastes, (entry) => entry.weight);
+      const options = candidatesByCaste.get(chosen.caste) || [];
+      if (!options.length) break;
+      const targetId = choice(options);
+      if (addEdge(state.graph, node.id, targetId)) {
+        if (targetId === state.youId) {
+          state.friends.add(node.id);
+        } else if (node.id === state.youId) {
+          state.friends.add(targetId);
+        }
+        created += 1;
+      } else {
+        // Edge already exists or invalid target; try again with fresh candidates.
+        // To prevent tight loops when no progress is possible, remove this candidate locally.
+        const remaining = options.filter((id) => id !== targetId);
+        if (remaining.length > 0) {
+          candidatesByCaste.set(chosen.caste, remaining);
+        } else {
+          candidatesByCaste.delete(chosen.caste);
+        }
+        if (!candidatesByCaste.size) break;
+      }
+    }
   }
 }
 
@@ -172,7 +334,9 @@ function populatePickList() {
   selPick.disabled = false;
   btnPickFromList.disabled = false;
   selPick.innerHTML = '';
-  const candidates = [...state.graph.nodes.values()].filter((node) => node.id !== state.youId && !state.friends.has(node.id));
+  const candidates = [...state.graph.nodes.values()].filter(
+    (node) => node.id !== state.youId && !hasEdge(state.graph, state.youId, node.id),
+  );
   const degree = (id) => neighbors(state.graph, id).length;
   candidates.sort((a, b) => b.friendly - a.friendly || b.score - a.score || degree(b.id) - degree(a.id));
   for (const node of candidates) {
@@ -190,16 +354,24 @@ function clearPickList() {
 }
 
 function tryBefriend(id) {
-  if (id === state.youId || state.friends.has(id)) return;
-  if (state.budget > 0) {
-    addEdge(state.graph, state.youId, id);
+  if (id === state.youId) return;
+  if (hasEdge(state.graph, state.youId, id)) {
+    setStatus(`Already connected to node ${id}.`);
+    return;
+  }
+  if (state.budget <= 0) {
+    setStatus('No budget left.');
+    return;
+  }
+  if (addEdge(state.graph, state.youId, id)) {
     state.friends.add(id);
     state.budget -= 1;
+    recomputeYouCaste();
     updateStats();
     setStatus(`Befriended node ${id}.`);
     endPickPhase();
   } else {
-    setStatus('No budget left.');
+    setStatus(`Could not befriend node ${id}.`);
   }
 }
 
@@ -291,7 +463,10 @@ function tick() {
       return;
     }
 
-    growth();
+    const newcomers = growth();
+    recomputeYouCaste();
+    runCasteConnections(newcomers);
+    recomputeYouCaste();
     layoutGraph(state.graph, state.youId);
     updateStats();
     renderer.draw();
@@ -327,7 +502,10 @@ function tick() {
     setStatus(`Purge check at t=${state.t}: none below threshold.`);
   }
 
-  growth();
+  const newcomers = growth();
+  recomputeYouCaste();
+  runCasteConnections(newcomers);
+  recomputeYouCaste();
   layoutGraph(state.graph, state.youId);
   updateStats();
   renderer.draw();
@@ -351,7 +529,7 @@ function tick() {
 function startGame() {
   syncParamsFromUI();
   resetGame();
-  addNode(state.graph, { friendly: 0.5, type: 'you', score: 0 });
+  addNode(state.graph, { friendly: 0.5, type: 'you', score: 0, category: state.youCaste });
   addNode(state.graph, { friendly: rand(), score: 0 });
   addNode(state.graph, { friendly: rand(), score: 0 });
   addNode(state.graph, { friendly: rand(), score: 0 });
@@ -440,7 +618,7 @@ elZ.onchange = () => {
   state.params.zMax = clamp(parseInt(elZ.value || state.params.zMax, 10), 0, 10);
 };
 elE.onchange = () => {
-  state.params.edgesPerNode = clamp(parseInt(elE.value || state.params.edgesPerNode, 10), 1, 5);
+  state.params.edgesPerNode = clamp(parseInt(elE.value || state.params.edgesPerNode, 10), 0, 5);
 };
 elK.onchange = () => {
   state.params.pickPeriod = clamp(parseInt(elK.value || state.params.pickPeriod, 10), 1, 20);
