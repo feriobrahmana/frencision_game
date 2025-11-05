@@ -18,6 +18,10 @@ export function createAnalyticsStore(onUpdate) {
       purged: 0,
       shockKind: '',
       shockSource: null,
+      shockMagnitude: 0,
+      shockRadius: 0,
+      shockCaste: '',
+      purgeThreshold: null,
     };
     recordMap.set(t, rec);
     analytics.push(rec);
@@ -92,6 +96,10 @@ export function createAnalyticsStore(onUpdate) {
       'purged',
       'shock_kind',
       'shock_source',
+      'shock_magnitude',
+      'shock_radius',
+      'shock_caste',
+      'purge_threshold',
     ];
     const lines = [header.join(',')];
     for (const r of analytics) {
@@ -107,6 +115,10 @@ export function createAnalyticsStore(onUpdate) {
         r.purged || 0,
         r.shockKind || '',
         r.shockSource == null ? '' : r.shockSource,
+        Number.isFinite(r.shockMagnitude) ? r.shockMagnitude.toFixed(6) : '',
+        Number.isFinite(r.shockRadius) ? r.shockRadius : '',
+        r.shockCaste || '',
+        Number.isFinite(r.purgeThreshold) ? r.purgeThreshold.toFixed(6) : '',
       ].join(','));
     }
     return lines.join('\n');

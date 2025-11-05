@@ -25,11 +25,6 @@ const banner = document.getElementById('pickBanner');
 const btnSkip = document.getElementById('btnSkip');
 const chkLabels = document.getElementById('showLabels');
 const chkYouSrc = document.getElementById('allowYouSource');
-const elPPos = document.getElementById('pPosVal');
-const elNNeg = document.getElementById('nNegVal');
-const elPNeg = document.getElementById('negProb');
-const elDThr = document.getElementById('dThreshold');
-
 const btnStart = document.getElementById('btnStart');
 const btnStep = document.getElementById('btnStep');
 const btnAuto = document.getElementById('btnAuto');
@@ -90,6 +85,25 @@ const CASTE_RULES = {
   },
 };
 
+const CASTE_SHOCK_RULES = {
+  'The Privileged': {
+    positive: { prob: 0.7, delta: 5, hops: 1 },
+    negative: { prob: 0.3, delta: -10, hops: 3 },
+  },
+  'The Stable': {
+    positive: { prob: 0.5, delta: 3, hops: 2 },
+    negative: { prob: 0.5, delta: -5, hops: 2 },
+  },
+  'The Poor': {
+    positive: { prob: 0.2, delta: 5, hops: 4 },
+    negative: { prob: 0.8, delta: -1, hops: 1 },
+  },
+  default: {
+    positive: { prob: 0.5, delta: 2, hops: 1 },
+    negative: { prob: 0.5, delta: -2, hops: 2 },
+  },
+};
+
 // --------- Helpers ---------
 function weightedPick(items, weightFn) {
   const weights = items.map(weightFn);
@@ -129,22 +143,12 @@ function enablePlayControls(enabled) {
 
 function syncParamsFromUI() {
   const toInt = (el, lo, hi, fallback) => clamp(Number.parseInt(el.value, 10) || fallback, lo, hi);
-  const toNum = (el, fallback) => {
-    const v = Number(el.value);
-    return Number.isFinite(v) ? v : fallback;
-  };
-
   state.params.zMax = toInt(elZ, 0, 10, state.params.zMax);
   state.params.edgesPerNode = toInt(elE, 0, 5, state.params.edgesPerNode);
   state.params.pickPeriod = toInt(elK, 1, 20, state.params.pickPeriod);
   state.params.shockPeriod = toInt(elN, 2, 30, state.params.shockPeriod);
   state.params.purgePeriod = toInt(elP, 2, 30, state.params.purgePeriod);
   state.params.budgetMax = toInt(elB, 0, 50, state.params.budgetMax);
-
-  state.params.positiveShock = toNum(elPPos, state.params.positiveShock);
-  state.params.negativeShock = toNum(elNNeg, state.params.negativeShock);
-  state.params.negativeShockProb = clamp(toNum(elPNeg, state.params.negativeShockProb), 0, 1);
-  state.params.purgeThreshold = toNum(elDThr, state.params.purgeThreshold);
 
   state.showLabels = chkLabels.checked;
   state.allowYouAsSource = chkYouSrc.checked;
@@ -190,6 +194,14 @@ function nodesWithinDistance(graph, startId, maxDistance) {
   }
   reachable.delete(startId);
   return reachable;
+}
+
+function median(values) {
+  if (!values.length) return 0;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) return (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted[mid];
 }
 
 function recomputeYouCaste() {
@@ -411,10 +423,17 @@ function doShock() {
   if (!state.allowYouAsSource) ids = ids.filter((id) => id !== state.youId);
   if (!ids.length) return;
   const src = choice(ids);
-  const isNegative = Math.random() < state.params.negativeShockProb;
-  const hops = isNegative ? 2 : 1;
-  const delta = isNegative ? state.params.negativeShock : state.params.positiveShock;
-  const kind = isNegative ? 'neg' : 'pos';
+  const srcNode = state.graph.nodes.get(src);
+  const caste = srcNode?.category || 'The Stable';
+  const rules = CASTE_SHOCK_RULES[caste] || CASTE_SHOCK_RULES.default;
+  const positiveRule = rules.positive || CASTE_SHOCK_RULES.default.positive;
+  const negativeRule = rules.negative || CASTE_SHOCK_RULES.default.negative;
+  const positiveProb = clamp(positiveRule.prob ?? CASTE_SHOCK_RULES.default.positive.prob, 0, 1);
+  const isPositive = Math.random() < positiveProb;
+  const outcome = isPositive ? positiveRule : negativeRule;
+  const delta = outcome.delta;
+  const hops = outcome.hops;
+  const kind = isPositive ? 'pos' : 'neg';
   const affected = bfsWithin(src, hops);
   for (const id of affected) {
     const node = state.graph.nodes.get(id);
@@ -424,11 +443,15 @@ function doShock() {
   rec.affected = affected.size;
   rec.shockKind = kind;
   rec.shockSource = src;
-  state.lastSplash = { src, affected, kind, ttl: 60 };
+  rec.shockMagnitude = delta;
+  rec.shockRadius = hops;
+  rec.shockCaste = caste;
+  state.lastSplash = { src, affected, kind, ttl: 60, delta, hops, caste };
   state.interlude = 'shock';
   pauseForInterlude();
-  const signStr = kind === 'neg' ? `${delta}` : `+${delta}`;
-  setStatus(`${kind === 'neg' ? 'Negative' : 'Positive'} shock ${signStr} at t=${state.t} (src ${src}). Step to continue.`);
+  const signStr = delta >= 0 ? `+${delta}` : `${delta}`;
+  const shockLabel = kind === 'neg' ? 'Negative' : 'Positive';
+  setStatus(`${caste} node #${src} triggered a ${shockLabel} shock ${signStr} (radius ${hops}) at t=${state.t}. Step to continue.`);
   renderer.draw();
 }
 
@@ -449,11 +472,14 @@ function tick() {
     const youWillDie = ids.includes(state.youId);
     const rec = analyticsStore.ensureRecord(state.t);
     rec.purged = ids.length;
+    if (state.lastPurgeThreshold != null) rec.purgeThreshold = state.lastPurgeThreshold;
     for (const id of ids) {
       removeNode(state.graph, id);
       state.friends.delete(id);
     }
     state.lastPurgeSet = null;
+    state.lastPurgeThreshold = null;
+    
     state.interlude = 'none';
 
     if (youWillDie) {
@@ -487,19 +513,24 @@ function tick() {
   }
 
   if (state.t > 0 && state.t % state.params.purgePeriod === 0) {
-    analyticsStore.measure(state.graph, state.t);
-    const toPurge = [...state.graph.nodes.values()]
-      .filter((node) => node.score < state.params.purgeThreshold)
-      .map((node) => node.id);
+    const rec = analyticsStore.measure(state.graph, state.t);
+    const nodes = [...state.graph.nodes.values()];
+    const scores = nodes.map((node) => node.score);
+    const threshold = median(scores);
+    rec.purgeThreshold = threshold;
+    const toPurge = nodes.filter((node) => node.score < threshold).map((node) => node.id);
     if (toPurge.length > 0) {
       state.lastPurgeSet = new Set(toPurge);
+      state.lastPurgeThreshold = threshold;
       state.interlude = 'purge';
       pauseForInterlude();
-      setStatus(`Purge preview at t=${state.t}: ${toPurge.length} node(s) will be removed. Step to confirm.`);
+      setStatus(`Purge preview at t=${state.t}: median ${threshold.toFixed(2)} -> ${toPurge.length} node(s) will be removed. Step to confirm.`);
       renderer.draw();
       return;
     }
-    setStatus(`Purge check at t=${state.t}: none below threshold.`);
+    state.lastPurgeSet = null;
+    state.lastPurgeThreshold = threshold;
+    setStatus(`Purge check at t=${state.t}: median ${threshold.toFixed(2)}, no removals.`);
   }
 
   const newcomers = growth();
@@ -551,6 +582,8 @@ function resetGame() {
   state.wasAutoBeforePick = false;
   state.lastSplash = null;
   state.lastPurgeSet = null;
+  state.lastPurgeThreshold = null;
+  
   state.interlude = 'none';
   state.resumeAfterInterlude = false;
   state.hoveredId = null;
@@ -633,19 +666,6 @@ elB.onchange = () => {
   state.params.budgetMax = clamp(parseInt(elB.value || state.params.budgetMax, 10), 0, 50);
   state.budget = state.params.budgetMax;
   updateStats();
-};
-
-elPPos.onchange = () => {
-  state.params.positiveShock = parseFloat(elPPos.value || state.params.positiveShock);
-};
-elNNeg.onchange = () => {
-  state.params.negativeShock = parseFloat(elNNeg.value || state.params.negativeShock);
-};
-elPNeg.onchange = () => {
-  state.params.negativeShockProb = clamp(parseFloat(elPNeg.value || state.params.negativeShockProb), 0, 1);
-};
-elDThr.onchange = () => {
-  state.params.purgeThreshold = parseFloat(elDThr.value || state.params.purgeThreshold);
 };
 
 chkLabels.onchange = () => {

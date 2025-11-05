@@ -15,10 +15,6 @@ export function createState() {
       shockPeriod: 3,
       purgePeriod: 10,
       budgetMax: 10,
-      positiveShock: 2.0,
-      negativeShock: -1.0,
-      negativeShockProb: 0.8,
-      purgeThreshold: 1.0,
     },
     youCaste: 'The Stable',
     budget: 10,
@@ -28,6 +24,7 @@ export function createState() {
     wasAutoBeforePick: false,
     lastSplash: null,
     lastPurgeSet: null,
+    lastPurgeThreshold: null,
     interlude: 'none',
     resumeAfterInterlude: false,
     hoveredId: null,
@@ -48,6 +45,7 @@ export function resetState(state) {
   state.wasAutoBeforePick = false;
   state.lastSplash = null;
   state.lastPurgeSet = null;
+  state.lastPurgeThreshold = null;
   state.interlude = 'none';
   state.resumeAfterInterlude = false;
   state.hoveredId = null;
