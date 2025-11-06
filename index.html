@@ -3,132 +3,62 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Network Propagation Game</title>
+  <title>Long Friendship — Narrative Edition</title>
   <link rel="stylesheet" href="src/styles.css" />
 </head>
 <body>
-  <aside>
-    <h2 style="margin:0 0 8px 0">Rules & Goal</h2>
-    <div class="card" style="font-size:14px;line-height:1.4">
-      In this little world, new faces drift in and look around. On each step, up to <em>z</em> newcomers arrive, and each one seeks out connections in proportion to how friendly everyone seems. No one stumbles into <em>you</em> by accident&mdash;the only way to connect to you is if you choose them.
-      <br><br>
-      Every <em>k</em> steps (including the very start), you may invite exactly one person into your circle&mdash;either by clicking their node or choosing them from the list. Each invite costs budget, and these are the only edges that ever touch you.
-      <br><br>
-      Your very first pick is a free look at three random prospects anywhere in the network. After you have at least one friend, invitations are gated by caste distance: Privileged can reach within five hops, Stable within three, and Poor within two. Eligible targets are highlighted and mirrored in the pick list.
-      <br><br>
-      Now and then, the world tilts. On a <strong>shock</strong> step (every <em>N</em>), a random source fires according to its caste: Privileged nodes usually rain +5 across one hop but sometimes blast -10 across three; Stable nodes flip a coin between +3 and -5, affecting two hops either way; Poor nodes rarely bloom +5 through four hops yet frequently leak -1 to their immediate neighbors. We highlight who was touched and pause so you can see the splash.
-      <br><br>
-      On a <strong>purge</strong> step (every <em>P</em>), the culling rule tightens over time: the first five purges use the median, purges six through eight only keep the top 25% of scores, and purges nine through thirteen spare just the top 10%. After the thirteenth purge we lock the board and crown the highest score, so stay ahead—or get erased early if you fall below the cut.
-      <br><br>
-      <strong>Your aim:</strong> make the right friendships to last as long as you can while pushing your score as high as you can.
-    </div>
-
-    <div class="card controls">
-      <div class="row"><label>Max spawns per step (z)</label><input id="zMax" type="number" min="0" max="10" value="5"></div>
-      <div class="row"><label>Edges per new node (e)</label><input id="edgesPerNode" type="number" min="1" max="5" value="2"></div>
-      <div class="row"><label>Pick period (k)</label><input id="kPeriod" type="number" min="1" max="20" value="7"></div>
-      <div class="row"><label>Shock period (N)</label><input id="nPeriod" type="number" min="2" max="30" value="3"></div>
-      <div class="row"><label>Purge period (P)</label><input id="pPeriod" type="number" min="2" max="30" value="10"></div>
-      <div class="row"><label>Friend budget (B)</label><input id="friendBudget" type="number" min="0" max="50" value="10"></div>
-
-      <div class="row"><label><input id="showLabels" type="checkbox" checked> Show friendliness & score</label></div>
-      <div class="row"><label><input id="allowYouSource" type="checkbox"> YOU can be shock source</label></div>
-
-      <div class="row" style="gap:6px;flex-wrap:wrap">
-        <button id="btnStart">Start</button>
-        <button id="btnStep" class="secondary">Step</button>
-        <button id="btnAuto" class="secondary">Auto ▶</button>
-        <button id="btnReset" class="danger">Reset</button>
-      </div>
-
-      <div class="statline">
-        <div class="pill" id="statStep">t = 0</div>
-        <div class="pill" id="statNodes">Nodes: 0</div>
-        <div class="pill" id="statFriends">Friends: 0 / 0</div>
-        <div class="pill" id="statScore">YOU score: 0.0</div>
-        <div class="pill" id="statStatus">Status: Ready</div>
-      </div>
-
-      <div class="legend">
-        <div><span class="dot" style="background:var(--good)"></span> You</div>
-        <div><span class="dot" style="background:var(--accent)"></span> Your friends</div>
-        <div><span class="dot" style="background:#64748b"></span> Others</div>
-        <div><span class="dot" style="background:var(--danger)"></span> Negative shock (≤2 hops)</div>
-        <div><span class="dot" style="background:var(--pos)"></span> Positive shock (≤1 hop)</div>
-        <div><span class="dot" style="background:var(--source)"></span> Shock source</div>
-        <div><span class="dot" style="background:var(--purge)"></span> Purge preview</div>
-      </div>
-
-      <div class="banner" id="pickBanner" style="display:none">Pick phase: choose visually or via list, or press <em>Skip</em>.</div>
-
-      <!-- List-based picker -->
-      <div class="pickerRow">
-        <select id="selPick" disabled title="Eligible nodes appear here during pick phase"></select>
-        <button id="btnPickFromList" class="secondary" disabled>Befriend</button>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <button id="btnSkip" class="secondary" style="width:100%">Skip pick</button>
-      </div>
-    </div>
-
-    <!-- Analytics -->
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <h3 style="margin:0;font-size:15px">Analytics</h3>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button id="btnDownloadCSV" class="secondary">Download CSV</button>
-          <button id="btnDownloadCharts" class="secondary">Charts PNG</button>
-        </div>
-      </div>
-      <div class="charts" style="margin-top:8px">
-        <div class="chartRow">
-          <div class="chartBox">
-            <div class="chartTitle">Average Degree</div>
-            <canvas id="chartAvgDeg" class="spark"></canvas>
-          </div>
-          <div class="chartBox">
-            <div class="chartTitle">Density</div>
-            <canvas id="chartDensity" class="spark"></canvas>
-          </div>
-        </div>
-        <div class="chartRow">
-          <div class="chartBox">
-            <div class="chartTitle">Global Clustering Coefficient</div>
-            <canvas id="chartCluster" class="spark"></canvas>
-          </div>
-          <div class="chartBox">
-            <div class="chartTitle">Degree Gini</div>
-            <canvas id="chartGini" class="spark"></canvas>
-          </div>
-        </div>
-        <div class="chartRow">
-          <div class="chartBox">
-            <div class="chartTitle">Affected (by shock)</div>
-            <canvas id="chartAffected" class="spark"></canvas>
-          </div>
-          <div class="chartBox">
-            <div class="chartTitle">Purged</div>
-            <canvas id="chartPurged" class="spark"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-  </aside>
-
-  <main>
-    <header>
-      <h1>Long Friendship — A Network Survival Game</h1>
-      <div style="font-size:13px;color:var(--muted)">Last as many steps as you can and grow your utility by choosing the right friends.</div>
+  <main class="layout">
+    <header class="hero">
+      <h1>Long Friendship — Narrative Edition</h1>
+      <p>
+        The network no longer beams inside your eye. Instead, the narrator tracks every tremor. Each day may bring
+        newcomers, shocks of fortune or misfortune, purges from an anxious council, and the rare chance to invite a new
+        friend. Listen closely and decide when to extend your hand.
+      </p>
     </header>
 
-    <canvas id="canvas"></canvas>
+    <aside class="panel">
+      <form id="configForm" class="grid" autocomplete="off">
+        <h2>World Settings</h2>
+        <label>
+          Max newcomers per day (z)
+          <input type="number" name="zMax" min="0" max="10" value="5" />
+        </label>
+        <label>
+          Edges per newcomer (e)
+          <input type="number" name="edgesPerNode" min="0" max="5" value="2" />
+        </label>
+        <label>
+          Invitation cadence (k)
+          <input type="number" name="pickPeriod" min="1" max="20" value="7" />
+        </label>
+        <label>
+          Shock cadence (N)
+          <input type="number" name="shockPeriod" min="2" max="30" value="3" />
+        </label>
+        <label>
+          Purge cadence (P)
+          <input type="number" name="purgePeriod" min="2" max="30" value="10" />
+        </label>
+        <label>
+          Friend budget (B)
+          <input type="number" name="budgetMax" min="0" max="50" value="10" />
+        </label>
+        <button type="button" id="btnStart" class="primary">Start the story</button>
+      </form>
 
-    <div id="statusBar">Status: Ready</div>
+      <div id="stats" class="stats">
+        <p>Start the story to track your standing.</p>
+      </div>
+      <p id="notice" class="notice"></p>
+    </aside>
 
-    <div class="footer">Vanilla HTML5 Canvas + JS. No libraries.</div>
+    <section class="story">
+      <div id="log" class="log"></div>
+      <div id="choices" class="choices"></div>
+    </section>
   </main>
 
   <script type="module" src="src/app.js"></script>
 </body>
 </html>
-
