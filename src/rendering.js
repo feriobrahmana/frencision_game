@@ -106,6 +106,15 @@ export function createRenderer(canvas, state) {
       }
     }
 
+    const canPick = state.picking && state.allowedPickIds && state.allowedPickIds.has(node.id);
+    if (canPick && node.id !== state.youId) {
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = 'rgba(59,130,246,0.85)';
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, radius + EXTRA_HIT_PAD * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     if (state.picking && node.id === state.hoveredId) {
       ctx.lineWidth = 2;
       ctx.strokeStyle = 'rgba(37,99,235,0.85)';

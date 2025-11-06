@@ -14,9 +14,11 @@
       <br><br>
       Every <em>k</em> steps (including the very start), you may invite exactly one person into your circle&mdash;either by clicking their node or choosing them from the list. Each invite costs budget, and these are the only edges that ever touch you.
       <br><br>
+      Your very first pick is a free look at three random prospects anywhere in the network. After you have at least one friend, invitations are gated by caste distance: Privileged can reach within five hops, Stable within three, and Poor within two. Eligible targets are highlighted and mirrored in the pick list.
+      <br><br>
       Now and then, the world tilts. On a <strong>shock</strong> step (every <em>N</em>), a random source fires according to its caste: Privileged nodes usually rain +5 across one hop but sometimes blast -10 across three; Stable nodes flip a coin between +3 and -5, affecting two hops either way; Poor nodes rarely bloom +5 through four hops yet frequently leak -1 to their immediate neighbors. We highlight who was touched and pause so you can see the splash.
       <br><br>
-      On a <strong>purge</strong> step (every <em>P</em>), we compute the median score of the living network and preview everyone sitting below it. Step again and those nodes are removed before growth resumes. You lose only if <em>you</em> are purged.
+      On a <strong>purge</strong> step (every <em>P</em>), the culling rule tightens over time: the first five purges use the median, purges six through eight only keep the top 25% of scores, and purges nine through thirteen spare just the top 10%. After the thirteenth purge we lock the board and crown the highest score, so stay ahead—or get erased early if you fall below the cut.
       <br><br>
       <strong>Your aim:</strong> make the right friendships to last as long as you can while pushing your score as high as you can.
     </div>

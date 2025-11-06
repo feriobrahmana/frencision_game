@@ -104,6 +104,15 @@ const CASTE_SHOCK_RULES = {
   },
 };
 
+const CASTE_PICK_RANGE = {
+  'The Privileged': 5,
+  'The Stable': 3,
+  'The Poor': 2,
+  default: 3,
+};
+
+const PURGE_FINAL_LIMIT = 13;
+
 // --------- Helpers ---------
 function weightedPick(items, weightFn) {
   const weights = items.map(weightFn);
@@ -202,6 +211,146 @@ function median(values) {
   const mid = Math.floor(sorted.length / 2);
   if (sorted.length % 2 === 0) return (sorted[mid - 1] + sorted[mid]) / 2;
   return sorted[mid];
+}
+
+function sampleArray(arr, count) {
+  const pool = arr.slice();
+  const take = Math.min(count, pool.length);
+  const out = [];
+  for (let i = 0; i < take; i += 1) {
+    const idx = rndInt(0, pool.length - 1);
+    out.push(pool[idx]);
+    pool.splice(idx, 1);
+  }
+  return out;
+}
+
+function computeAllowedPickIds() {
+  const candidateIds = [];
+  for (const node of state.graph.nodes.values()) {
+    if (node.id === state.youId) continue;
+    if (hasEdge(state.graph, state.youId, node.id)) continue;
+    candidateIds.push(node.id);
+  }
+  if (!candidateIds.length) return [];
+
+  const currentFriends = neighbors(state.graph, state.youId).length;
+  if (currentFriends === 0) {
+    return sampleArray(candidateIds, 3);
+  }
+
+  const range = CASTE_PICK_RANGE[state.youCaste] ?? CASTE_PICK_RANGE.default;
+  const reachable = nodesWithinDistance(state.graph, state.youId, range);
+  return candidateIds.filter((id) => reachable.has(id));
+}
+
+function determinePurgePhase(index) {
+  if (index <= 5) return { kind: 'median', label: 'median', analytics: 'median' };
+  if (index <= 8) return { kind: 'topPercent', percent: 0.25, label: 'top 25%', analytics: 'top25' };
+  if (index <= PURGE_FINAL_LIMIT) return { kind: 'topPercent', percent: 0.1, label: 'top 10%', analytics: 'top10' };
+  return { kind: 'median', label: 'median', analytics: 'median' };
+}
+
+function computeMedianPlan(nodes) {
+  if (!nodes.length) return { threshold: 0, toPurge: [], survivors: nodes.map((n) => n.id) };
+  const threshold = median(nodes.map((node) => node.score));
+  const toPurge = nodes.filter((node) => node.score < threshold).map((node) => node.id);
+  const survivors = nodes.filter((node) => node.score >= threshold).map((node) => node.id);
+  return { threshold, toPurge, survivors };
+}
+
+function computeTopPercentPlan(nodes, keepFraction) {
+  if (!nodes.length) return { threshold: 0, toPurge: [], survivors: [] };
+  const sortedDesc = nodes.slice().sort((a, b) => b.score - a.score);
+  const survivorsCount = Math.max(1, Math.ceil(sortedDesc.length * keepFraction));
+  const survivorsSlice = sortedDesc.slice(0, survivorsCount);
+  const survivors = new Set(survivorsSlice.map((node) => node.id));
+  const cutoffScore = survivorsSlice[survivorsSlice.length - 1]?.score ?? -Infinity;
+  const toPurge = nodes.filter((node) => !survivors.has(node.id)).map((node) => node.id);
+  return { threshold: cutoffScore, toPurge, survivors: [...survivors] };
+}
+
+function computePurgePlan(nodes, phase) {
+  if (phase.kind === 'topPercent') return computeTopPercentPlan(nodes, phase.percent);
+  return computeMedianPlan(nodes);
+}
+
+function recordFriendship(nodeId) {
+  if (nodeId === state.youId || state.everFriendIds.has(nodeId)) return;
+  const node = state.graph.nodes.get(nodeId);
+  const caste = node?.category || 'Other';
+  state.everFriendIds.add(nodeId);
+  state.friendCasteCounts.set(caste, (state.friendCasteCounts.get(caste) || 0) + 1);
+}
+
+function formatFriendSummary() {
+  const total = state.everFriendIds.size;
+  if (total === 0) return 'Friends made: 0.';
+  const parts = [];
+  for (const caste of CASTE_LIST) {
+    const count = state.friendCasteCounts.get(caste) || 0;
+    if (count > 0) {
+      const perc = ((count / total) * 100).toFixed(1).replace(/\.0$/, '');
+      parts.push(`${caste}: ${perc}%`);
+    }
+  }
+  let others = 0;
+  for (const [caste, count] of state.friendCasteCounts.entries()) {
+    if (!CASTE_LIST.includes(caste)) others += count;
+  }
+  if (others > 0) {
+    const perc = ((others / total) * 100).toFixed(1).replace(/\.0$/, '');
+    parts.push(`Other: ${perc}%`);
+  }
+  return `Friends made: ${total}. Caste mix: ${parts.join(', ')}.`;
+}
+
+function finalizeOutcome(baseMessage) {
+  stopAuto();
+  state.gameOver = true;
+  state.picking = false;
+  state.wasAutoBeforePick = false;
+  state.resumeAfterInterlude = false;
+  banner.style.display = 'none';
+  clearPickList();
+  enablePlayControls(false);
+  state.lastPurgeSet = null;
+  state.lastPurgeThreshold = null;
+  state.lastPurgeMode = null;
+  state.lastSplash = null;
+  state.hoveredId = null;
+  const summary = formatFriendSummary();
+  const message = summary ? `${baseMessage} ${summary}` : baseMessage;
+  setStatus(message.trim());
+  updateStats();
+  renderer.draw();
+}
+
+function checkEndgameAfterPurge() {
+  if (state.purgeCount < PURGE_FINAL_LIMIT) return false;
+  recomputeYouCaste();
+  const youNode = state.graph.nodes.get(state.youId);
+  if (!youNode) return false;
+  let maxScore = -Infinity;
+  for (const node of state.graph.nodes.values()) {
+    if (node.score > maxScore) maxScore = node.score;
+  }
+  if (youNode.score >= maxScore) {
+    finalizeOutcome('Congratulations! You are the leader of the leaders!');
+  } else {
+    let message;
+    if (state.youCaste === 'The Privileged') {
+      message = 'Congratulations! You are the top notch! However, you are still none other than waling meat for the leader of leaders.';
+    } else if (state.youCaste === 'The Stable') {
+      message = 'Well well, you live long enough, but you are just mediocre.';
+    } else if (state.youCaste === 'The Poor') {
+      message = 'You live long just to be a trash, but... still you are a good trash.';
+    } else {
+      message = 'You endured, but the crown went elsewhere.';
+    }
+    finalizeOutcome(message);
+  }
+  return true;
 }
 
 function recomputeYouCaste() {
@@ -307,8 +456,10 @@ function runCasteConnections(newcomerIds) {
       if (addEdge(state.graph, node.id, targetId)) {
         if (targetId === state.youId) {
           state.friends.add(node.id);
+          recordFriendship(node.id);
         } else if (node.id === state.youId) {
           state.friends.add(targetId);
+          recordFriendship(targetId);
         }
         created += 1;
       } else {
@@ -343,15 +494,21 @@ function bfsWithin(start, maxHops) {
 }
 
 function populatePickList() {
+  selPick.innerHTML = '';
+  const allowedIds = state.allowedPickIds ? [...state.allowedPickIds] : [];
+  if (!allowedIds.length) {
+    selPick.disabled = true;
+    btnPickFromList.disabled = true;
+    return;
+  }
   selPick.disabled = false;
   btnPickFromList.disabled = false;
-  selPick.innerHTML = '';
-  const candidates = [...state.graph.nodes.values()].filter(
-    (node) => node.id !== state.youId && !hasEdge(state.graph, state.youId, node.id),
-  );
   const degree = (id) => neighbors(state.graph, id).length;
-  candidates.sort((a, b) => b.friendly - a.friendly || b.score - a.score || degree(b.id) - degree(a.id));
-  for (const node of candidates) {
+  const nodes = allowedIds
+    .map((id) => state.graph.nodes.get(id))
+    .filter(Boolean)
+    .sort((a, b) => b.friendly - a.friendly || b.score - a.score || degree(b.id) - degree(a.id));
+  for (const node of nodes) {
     const option = document.createElement('option');
     option.value = String(node.id);
     option.textContent = `#${node.id} | ${node.category} | f=${node.friendly.toFixed(2)} | s=${node.score.toFixed(1)} | deg=${degree(node.id)}`;
@@ -363,10 +520,22 @@ function clearPickList() {
   selPick.disabled = true;
   btnPickFromList.disabled = true;
   selPick.innerHTML = '';
+  state.allowedPickIds = new Set();
+}
+
+function refreshPickCandidates() {
+  const allowed = computeAllowedPickIds();
+  state.allowedPickIds = new Set(allowed);
+  populatePickList();
+  return allowed.length;
 }
 
 function tryBefriend(id) {
   if (id === state.youId) return;
+  if (state.picking && state.allowedPickIds && !state.allowedPickIds.has(id)) {
+    setStatus(`Node ${id} is out of reach right now.`);
+    return;
+  }
   if (hasEdge(state.graph, state.youId, id)) {
     setStatus(`Already connected to node ${id}.`);
     return;
@@ -377,6 +546,7 @@ function tryBefriend(id) {
   }
   if (addEdge(state.graph, state.youId, id)) {
     state.friends.add(id);
+    recordFriendship(id);
     state.budget -= 1;
     recomputeYouCaste();
     updateStats();
@@ -393,10 +563,19 @@ function beginPickPhase() {
     state.wasAutoBeforePick = true;
   }
   state.picking = true;
+  state.hoveredId = null;
   banner.style.display = 'block';
   enablePlayControls(false);
-  populatePickList();
-  setStatus(`Pick phase at t=${state.t}: click a node or use the list, or Skip.`);
+  const eligibleCount = refreshPickCandidates();
+  const currentFriends = neighbors(state.graph, state.youId).length;
+  if (eligibleCount === 0) {
+    setStatus(`Pick phase at t=${state.t}: no eligible nodes in range. Skip to continue.`);
+  } else if (currentFriends === 0) {
+    setStatus(`Pick phase at t=${state.t}: choose one of ${eligibleCount} starter options (or Skip).`);
+  } else {
+    const range = CASTE_PICK_RANGE[state.youCaste] ?? CASTE_PICK_RANGE.default;
+    setStatus(`Pick phase at t=${state.t}: eligible within ${range} hop(s). Click a node or use the list, or Skip.`);
+  }
   renderer.draw();
 }
 
@@ -469,25 +648,29 @@ function tick() {
 
   if (state.interlude === 'purge') {
     const ids = [...(state.lastPurgeSet || [])];
-    const youWillDie = ids.includes(state.youId);
     const rec = analyticsStore.ensureRecord(state.t);
     rec.purged = ids.length;
     if (state.lastPurgeThreshold != null) rec.purgeThreshold = state.lastPurgeThreshold;
+    if (state.lastPurgeMode) rec.purgeRule = state.lastPurgeMode;
+    state.purgeCount += 1;
+
+    const youWillDie = ids.includes(state.youId);
+    if (youWillDie) {
+      finalizeOutcome('You are dead because you don\'t know how to connect with the world.');
+      return;
+    }
+
     for (const id of ids) {
       removeNode(state.graph, id);
       state.friends.delete(id);
     }
+
     state.lastPurgeSet = null;
     state.lastPurgeThreshold = null;
-    
+    state.lastPurgeMode = null;
     state.interlude = 'none';
 
-    if (youWillDie) {
-      state.gameOver = true;
-      setStatus(`You were purged at t=${state.t}.`);
-      renderer.draw();
-      return;
-    }
+    if (checkEndgameAfterPurge()) return;
 
     const newcomers = growth();
     recomputeYouCaste();
@@ -515,22 +698,35 @@ function tick() {
   if (state.t > 0 && state.t % state.params.purgePeriod === 0) {
     const rec = analyticsStore.measure(state.graph, state.t);
     const nodes = [...state.graph.nodes.values()];
-    const scores = nodes.map((node) => node.score);
-    const threshold = median(scores);
-    rec.purgeThreshold = threshold;
-    const toPurge = nodes.filter((node) => node.score < threshold).map((node) => node.id);
-    if (toPurge.length > 0) {
-      state.lastPurgeSet = new Set(toPurge);
-      state.lastPurgeThreshold = threshold;
+    const upcoming = state.purgeCount + 1;
+    const phase = determinePurgePhase(upcoming);
+    const plan = computePurgePlan(nodes, phase);
+    rec.purgeThreshold = plan.threshold;
+    rec.purgeRule = phase.analytics;
+    rec.purged = plan.toPurge.length;
+    if (plan.toPurge.length > 0) {
+      state.lastPurgeSet = new Set(plan.toPurge);
+      state.lastPurgeThreshold = plan.threshold;
+      state.lastPurgeMode = phase.analytics;
       state.interlude = 'purge';
       pauseForInterlude();
-      setStatus(`Purge preview at t=${state.t}: median ${threshold.toFixed(2)} -> ${toPurge.length} node(s) will be removed. Step to confirm.`);
+      const previewMsg = phase.kind === 'median'
+        ? `Purge preview at t=${state.t}: median ${plan.threshold.toFixed(2)} -> ${plan.toPurge.length} node(s) will be removed. Step to confirm.`
+        : `Purge preview at t=${state.t}: ${phase.label} survive -> ${plan.toPurge.length} node(s) will be removed. Step to confirm.`;
+      setStatus(previewMsg);
       renderer.draw();
       return;
     }
     state.lastPurgeSet = null;
-    state.lastPurgeThreshold = threshold;
-    setStatus(`Purge check at t=${state.t}: median ${threshold.toFixed(2)}, no removals.`);
+    state.lastPurgeThreshold = null;
+    state.lastPurgeMode = phase.analytics;
+    state.purgeCount += 1;
+    const checkMsg = phase.kind === 'median'
+      ? `Purge check at t=${state.t}: median ${plan.threshold.toFixed(2)}, no removals.`
+      : `Purge check at t=${state.t}: ${phase.label} survive, no removals.`;
+    setStatus(checkMsg);
+    if (checkEndgameAfterPurge()) return;
+    state.lastPurgeMode = null;
   }
 
   const newcomers = growth();
@@ -583,6 +779,10 @@ function resetGame() {
   state.lastSplash = null;
   state.lastPurgeSet = null;
   state.lastPurgeThreshold = null;
+  state.lastPurgeMode = null;
+  state.purgeCount = 0;
+  state.everFriendIds = new Set();
+  state.friendCasteCounts = new Map();
   
   state.interlude = 'none';
   state.resumeAfterInterlude = false;
@@ -677,14 +877,23 @@ chkYouSrc.onchange = () => {
 };
 
 canvas.addEventListener('mousemove', (event) => {
-  state.hoveredId = state.picking ? renderer.hitTest(event) : null;
+  if (!state.picking) {
+    state.hoveredId = null;
+    return;
+  }
+  const id = renderer.hitTest(event);
+  if (id != null && state.allowedPickIds && state.allowedPickIds.has(id)) {
+    state.hoveredId = id;
+  } else {
+    state.hoveredId = null;
+  }
   renderer.draw();
 });
 
 canvas.addEventListener('click', (event) => {
   if (!state.picking || state.gameOver) return;
   const id = renderer.hitTest(event);
-  if (id == null) return;
+  if (id == null || (state.allowedPickIds && !state.allowedPickIds.has(id))) return;
   tryBefriend(id);
 });
 

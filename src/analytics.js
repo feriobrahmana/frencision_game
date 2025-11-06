@@ -22,6 +22,7 @@ export function createAnalyticsStore(onUpdate) {
       shockRadius: 0,
       shockCaste: '',
       purgeThreshold: null,
+      purgeRule: '',
     };
     recordMap.set(t, rec);
     analytics.push(rec);
@@ -100,6 +101,7 @@ export function createAnalyticsStore(onUpdate) {
       'shock_radius',
       'shock_caste',
       'purge_threshold',
+      'purge_rule',
     ];
     const lines = [header.join(',')];
     for (const r of analytics) {
@@ -119,6 +121,7 @@ export function createAnalyticsStore(onUpdate) {
         Number.isFinite(r.shockRadius) ? r.shockRadius : '',
         r.shockCaste || '',
         Number.isFinite(r.purgeThreshold) ? r.purgeThreshold.toFixed(6) : '',
+        r.purgeRule || '',
       ].join(','));
     }
     return lines.join('\n');

@@ -25,11 +25,16 @@ export function createState() {
     lastSplash: null,
     lastPurgeSet: null,
     lastPurgeThreshold: null,
+    lastPurgeMode: null,
+    purgeCount: 0,
     interlude: 'none',
     resumeAfterInterlude: false,
     hoveredId: null,
     showLabels: true,
     allowYouAsSource: false,
+    allowedPickIds: new Set(),
+    everFriendIds: new Set(),
+    friendCasteCounts: new Map(),
   };
 }
 
@@ -46,7 +51,12 @@ export function resetState(state) {
   state.lastSplash = null;
   state.lastPurgeSet = null;
   state.lastPurgeThreshold = null;
+  state.lastPurgeMode = null;
+  state.purgeCount = 0;
   state.interlude = 'none';
   state.resumeAfterInterlude = false;
   state.hoveredId = null;
+  state.allowedPickIds = new Set();
+  state.everFriendIds = new Set();
+  state.friendCasteCounts = new Map();
 }
