@@ -41,19 +41,19 @@ function renderLog(lines) {
 
 function renderStats(snapshot) {
   if (!snapshot) {
-    elStats.innerHTML = '<p>Start a new tale to view your standing.</p>';
+    elStats.textContent = '- Story not yet begun.\n- Adjust the world settings and press Start.';
     return;
   }
-  const chunks = [
-    `Day ${snapshot.day}`,
-    `YOU caste: ${snapshot.youCaste}`,
-    `Score: ${snapshot.youScore.toFixed(1)}`,
-    `Friends: ${snapshot.friends}`,
-    `Budget left: ${snapshot.friendBudget}`,
-    `Network size: ${snapshot.totalNodes}`,
-    `Purges survived: ${snapshot.purgeCount}`,
+  const lines = [
+    `- Day ${snapshot.day}`,
+    `- YOU caste: ${snapshot.youCaste}`,
+    `- Score: ${snapshot.youScore.toFixed(1)}`,
+    `- Friends: ${snapshot.friends}`,
+    `- Budget left: ${snapshot.friendBudget}`,
+    `- Network size: ${snapshot.totalNodes}`,
+    `- Purges survived: ${snapshot.purgeCount}`,
   ];
-  elStats.innerHTML = `<p>${chunks.join(' · ')}</p>`;
+  elStats.textContent = lines.join('\n');
 }
 
 function clearChoices() {

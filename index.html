@@ -11,11 +11,17 @@
     <header class="hero">
       <h1>Long Friendship — Narrative Edition</h1>
       <p>
-        The network no longer beams inside your eye. Instead, the narrator tracks every tremor. Each day may bring
-        newcomers, shocks of fortune or misfortune, purges from an anxious council, and the rare chance to invite a new
-        friend. Listen closely and decide when to extend your hand.
+        Your task is simple: survive the purges and rise in standing. Each day you will hear who arrived, who prospered,
+        and who was swept away. Spend your limited invitations to befriend castes with jobs that strengthen your circle,
+        and brace for shocks that can bless or ruin you. Listen, choose, endure.
       </p>
     </header>
+
+    <section class="status-panel">
+      <h2>Your Status</h2>
+      <div id="stats" class="stats">- Start the story to track your standing.</div>
+      <p id="notice" class="notice"></p>
+    </section>
 
     <aside class="panel">
       <form id="configForm" class="grid" autocomplete="off">
@@ -46,11 +52,6 @@
         </label>
         <button type="button" id="btnStart" class="primary">Start the story</button>
       </form>
-
-      <div id="stats" class="stats">
-        <p>Start the story to track your standing.</p>
-      </div>
-      <p id="notice" class="notice"></p>
     </aside>
 
     <section class="story">

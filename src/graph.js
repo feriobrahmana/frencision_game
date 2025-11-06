@@ -17,11 +17,20 @@ export function createGraph() {
 
 export function addNode(
   graph,
-  { friendly = Math.random(), type = 'normal', score = 0, category } = {},
+  { friendly = Math.random(), type = 'normal', score = 0, category, job = null } = {},
 ) {
   const id = graph.nextId++;
   const nodeCategory = type === 'you' ? category : category ?? randomCategory();
-  graph.nodes.set(id, { id, x: 0, y: 0, friendly, type, score, category: nodeCategory });
+  graph.nodes.set(id, {
+    id,
+    x: 0,
+    y: 0,
+    friendly,
+    type,
+    score,
+    category: nodeCategory,
+    job,
+  });
   return id;
 }
 

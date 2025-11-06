@@ -4,6 +4,45 @@ import { addNode, addEdge, removeNode, neighbors, hasEdge } from './graph.js';
 
 const CASTE_LIST = ['The Privileged', 'The Stable', 'The Poor'];
 
+const JOBS = {
+  'The Privileged': [
+    'Minister of Trade',
+    'Central Bank Governor',
+    'Biotech Tycoon',
+    'Shipping Magnate',
+    'Defense Contractor Chair',
+    'Media Empire Director',
+    'Global Real Estate Baron',
+    'Venture Capital Overlord',
+    'Tech Conglomerate Founder',
+    'Oil Dynasty Heir',
+  ],
+  'The Stable': [
+    'Community Doctor',
+    'High School Teacher',
+    'Civil Rights Lawyer',
+    'Bridge Engineer',
+    'Local Restaurateur',
+    'City Librarian',
+    'Nurse Practitioner',
+    'Social Worker',
+    'Urban Planner',
+    'Small Business Owner',
+  ],
+  'The Poor': [
+    'Street Vendor',
+    'Alley Mechanic',
+    'Night Shift Guard',
+    'Waste Sorter',
+    'Subway Busker',
+    'Day Laborer',
+    'Subsistence Farmer',
+    'Petty Thief',
+    'Sewing Floor Hand',
+    'Office Cleaner',
+  ],
+};
+
 const CASTE_PRIORITY = {
   'The Poor': 0,
   'The Stable': 1,
@@ -61,6 +100,11 @@ const CASTE_PICK_RANGE = {
 };
 
 const PURGE_FINAL_LIMIT = 13;
+
+function jobForCaste(caste) {
+  const list = JOBS[caste] || JOBS['The Stable'];
+  return choice(list);
+}
 
 function nodesWithinDistance(graph, startId, maxDistance) {
   const visited = new Set([startId]);
@@ -326,7 +370,10 @@ function bfsWithin(state, start, hops) {
   return seen;
 }
 
-function describeShock(kind, caste, delta, hops, affectedCount, youHit) {
+function describeShock(kind, caste, job, delta, hops, affectedCount, youHit) {
+  let source;
+  if (job === 'You') source = 'You';
+  else source = job ? `${job} of the ${caste}` : `The ${caste}`;
   const mood = kind === 'pos' ? 'blessings' : 'misery';
   const scope = hops === 1 ? 'nearby friends' : `${hops} hops of influence`;
   const impactLine = youHit
@@ -335,7 +382,7 @@ function describeShock(kind, caste, delta, hops, affectedCount, youHit) {
       ? 'Nobody seemed to notice.'
       : `${affectedCount} nodes were swept up.`;
   const deltaLabel = delta >= 0 ? `+${delta}` : `${delta}`;
-  return `The ${caste} sent ${mood} (${deltaLabel}) across ${scope}. ${impactLine}`;
+  return `${source} sent ${mood} (${deltaLabel}) across ${scope}. ${impactLine}`;
 }
 
 function describePurge(result, youRemoved) {
@@ -399,11 +446,21 @@ export function createGameEngine() {
   }
 
   function seedWorld() {
-    const youId = addNode(state.graph, { friendly: 0.5, type: 'you', score: 0, category: state.youCaste });
+    const youId = addNode(state.graph, {
+      friendly: 0.5,
+      type: 'you',
+      score: 0,
+      category: state.youCaste,
+      job: 'You',
+    });
     state.youId = youId;
-    addNode(state.graph, { friendly: rand(), score: 0 });
-    addNode(state.graph, { friendly: rand(), score: 0 });
-    addNode(state.graph, { friendly: rand(), score: 0 });
+    for (let i = 0; i < 3; i += 1) {
+      const id = addNode(state.graph, { friendly: rand(), score: 0 });
+      const node = state.graph.nodes.get(id);
+      if (node) node.job = jobForCaste(node.category);
+    }
+    const youNode = state.graph.nodes.get(youId);
+    if (youNode) youNode.job = 'You';
     recomputeYouCaste(state);
   }
 
@@ -414,7 +471,7 @@ export function createGameEngine() {
         reason: state.pendingPick.reason,
         options: state.pendingPick.options.map((node) => ({
           id: node.id,
-          label: `#${node.id} · ${node.category} · f=${node.friendly.toFixed(2)} · s=${node.score.toFixed(1)}`,
+          label: `${node.job || `#${node.id}`} (#${node.id}) · ${node.category} · score ${node.score.toFixed(1)}`,
         })),
         canSkip: true,
         message: state.pendingPick.message,
@@ -471,6 +528,8 @@ export function createGameEngine() {
     const newcomers = [];
     for (let i = 0; i < spawns; i += 1) {
       const id = addNode(state.graph, { friendly: Math.random(), score: 0 });
+      const node = state.graph.nodes.get(id);
+      if (node) node.job = jobForCaste(node.category);
       newcomers.push(id);
     }
     return newcomers;
@@ -498,15 +557,16 @@ export function createGameEngine() {
       if (node) node.score += delta;
     }
     state.lastShock = { src, affected, kind, delta, hops, caste };
-    const youHit = affected.has(state.youId);
-    return {
-      src,
-      caste,
-      delta,
-      hops,
-      kind,
-      affectedCount: affected.size,
-      youHit,
+  const youHit = affected.has(state.youId);
+  return {
+    src,
+    caste,
+    job: srcNode?.job || null,
+    delta,
+    hops,
+    kind,
+    affectedCount: affected.size,
+    youHit,
     };
   }
 
@@ -569,6 +629,7 @@ export function createGameEngine() {
       };
     }
     state.t += 1;
+    log('--------------------------');
     log(`Day ${state.t}: the network stirs.`);
 
     let purgeSummary = null;
@@ -597,8 +658,11 @@ export function createGameEngine() {
 
     const newcomers = growth();
     if (newcomers.length > 0) {
-      const names = newcomers.map((id) => `#${id}`).join(', ');
-      log(`Newcomers drifted in: ${names}.`);
+      const arrivals = newcomers
+        .map((id) => state.graph.nodes.get(id))
+        .filter(Boolean)
+        .map((node) => `${node.job || 'Newcomer'} (#${node.id})`);
+      log(`Newcomers drifted in: ${arrivals.join(', ')}.`);
     } else {
       log('No new faces today; the air felt still.');
     }
@@ -614,7 +678,15 @@ export function createGameEngine() {
     if (state.t > 0 && state.t % state.params.shockPeriod === 0) {
       const shock = applyShock();
       if (shock) {
-        log(describeShock(shock.kind, shock.caste, shock.delta, shock.hops, shock.affectedCount, shock.youHit));
+        log(describeShock(
+          shock.kind,
+          shock.caste,
+          shock.job,
+          shock.delta,
+          shock.hops,
+          shock.affectedCount,
+          shock.youHit,
+        ));
       }
     } else {
       log('No shocks rippled today.');
@@ -680,7 +752,8 @@ export function createGameEngine() {
       state.friends.add(id);
       recordFriendship(state, id);
       state.budget -= 1;
-      log(`You reached out to #${id} of the ${target.category}. They clasped your hand. Budget left: ${state.budget}.`);
+      const job = target.job || `#${id}`;
+      log(`You reached out to ${job} of the ${target.category}. They clasped your hand. Budget left: ${state.budget}.`);
       recomputeYouCaste(state);
     } else {
       log(`Your invitation to #${id} faltered. No edge formed.`);
