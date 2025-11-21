@@ -17,12 +17,23 @@ const canvas = document.getElementById('networkCanvas');
 
 const form = document.getElementById('configForm');
 const btnStart = document.getElementById('btnStart');
+const btnTheme = document.getElementById('btnTheme');
 
 // Visualization State
 let renderer = null;
 let animFrameId = null;
 let isGameRunning = false;
 let pendingPickOptions = null; // Store current options to map clicks to actions
+
+// Theme State
+function toggleTheme() {
+  const html = document.documentElement;
+  const isLight = html.getAttribute('data-theme') === 'light';
+  html.setAttribute('data-theme', isLight ? 'dark' : 'light');
+  btnTheme.textContent = isLight ? '☀' : '☾';
+}
+
+btnTheme.addEventListener('click', toggleTheme);
 
 function readParams() {
   const formData = new FormData(form);

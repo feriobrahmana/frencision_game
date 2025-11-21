@@ -17,7 +17,6 @@ export function createRenderer(canvas, state) {
       let bestDist = Infinity;
 
       for (const node of state.graph.nodes.values()) {
-          // Distance Check
           const dx = x - node.x;
           const dy = y - node.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
@@ -41,7 +40,7 @@ export function createRenderer(canvas, state) {
     if (shock && shock.affected.has(a) && shock.affected.has(b)) {
       return shock.kind === 'neg' ? getCss('--danger') : getCss('--success');
     }
-    return 'rgba(255, 255, 255, 0.15)';
+    return getCss('--edge-default');
   }
 
   function drawBadge(cx, cy, text) {
@@ -55,29 +54,54 @@ export function createRenderer(canvas, state) {
 
     ctx.beginPath();
     ctx.roundRect(x, y, width, height, radius);
-    ctx.fillStyle = 'rgba(24, 24, 27, 0.9)';
+    ctx.fillStyle = getCss('--bg-panel');
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.strokeStyle = getCss('--edge-default');
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    ctx.fillStyle = '#e4e4e7';
+    ctx.fillStyle = getCss('--text-main');
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, cx, cy + 1);
   }
 
+  function drawShape(x, y, r, shape) {
+    ctx.beginPath();
+    if (shape === 'hexagon') {
+      for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 3) * i;
+        const px = x + r * Math.cos(angle);
+        const py = y + r * Math.sin(angle);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+    } else if (shape === 'square') {
+      ctx.rect(x - r, y - r, r * 2, r * 2);
+    } else {
+      // Circle (default)
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+    }
+  }
+
   function drawNode(node) {
     const radius = getNodeRadius(node);
 
-    // Base Colors
-    let fill = '#3f3f46'; // Zinc 700
-    let stroke = '#52525b'; // Zinc 600
+    // Determine Shape
+    let shape = 'circle';
+    if (node.category === 'The Privileged') shape = 'hexagon';
+    else if (node.category === 'The Stable') shape = 'square';
 
-    // Context Colors
+    // Determine Colors
+    let fill = getCss('--node-fill');
+    let stroke = getCss('--node-stroke');
+
     if (node.id === state.youId) {
         fill = getCss('--accent');
         stroke = getCss('--accent-hover');
+        // "You" always gets a special shape or just circle? Let's keep it caste-based but distinct color.
+        // Or maybe "You" is always a Star? No, let's stick to color.
     } else if (state.friends.has(node.id)) {
         fill = getCss('--success');
         stroke = '#059669';
@@ -86,23 +110,25 @@ export function createRenderer(canvas, state) {
     // Event Colors
     if (state.lastShock) {
        if (state.lastShock.src === node.id) {
-         fill = '#f59e0b'; // Source is Warning/Amber
+         fill = getCss('--warning');
        } else if (state.lastShock.affected.has(node.id)) {
          fill = state.lastShock.kind === 'neg' ? getCss('--danger') : getCss('--success');
        }
     }
 
-    // Highlight from Hover
+    // Hover Glow
     if (hoveredId !== null && hoveredId === node.id) {
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, radius + 6, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.save();
+      drawShape(node.x, node.y, radius + 4, shape);
+      ctx.fillStyle = getCss('--text-muted');
+      ctx.globalAlpha = 0.3;
       ctx.fill();
-      stroke = '#fff';
+      ctx.restore();
+      stroke = getCss('--text-main');
     }
 
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+    // Draw Main Body
+    drawShape(node.x, node.y, radius, shape);
     ctx.fillStyle = fill;
     ctx.fill();
     ctx.lineWidth = 1.5;
@@ -110,23 +136,19 @@ export function createRenderer(canvas, state) {
     ctx.stroke();
 
     // ID Badge
-    drawBadge(node.x, node.y - radius - 10, String(node.id));
+    drawBadge(node.x, node.y - radius - 12, String(node.id));
   }
 
   function draw() {
     const ratio = window.devicePixelRatio || 1;
 
-    // Clear whole canvas
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Scale for high DPI, but DO NOT TRANSLATE origin.
-    // Layout engine produces coordinates in logical pixels (0..clientWidth, 0..clientHeight).
-    // So we just scale by ratio.
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 
     // Edges
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.5; // Slightly thicker for visibility
     for (const key of state.graph.edges) {
       const [a, b] = key.split('-').map(Number);
       const A = state.graph.nodes.get(a);
