@@ -11,20 +11,21 @@
   <!-- LOBBY SCREEN -->
   <section id="viewLobby" class="view-lobby">
     <div class="lobby-card">
+      <button id="btnLobbyTheme" class="btn-icon" title="Toggle Theme" style="position: absolute; top: 20px; right: 20px;">☀</button>
       <header class="lobby-header">
         <h1>Long Friendship</h1>
         <p>
-          You are a node in a shifting network. <br/>
-          To survive, you must maintain a high score to avoid being purged.<br/>
-          Connect with high-score nodes to boost your own standing, but beware of Shocks that ripple through connections.
+          Make the best out of your life by socializing.<br/>
+          Watch the network grow and find your place in it.
         </p>
       </header>
 
       <div class="lobby-intro" style="margin-bottom: 24px; font-size: 13px; color: var(--text-dim); line-height: 1.6; border-bottom: 1px solid var(--bg-surface); padding-bottom: 20px;">
-        <strong>Mission Briefing:</strong><br/>
-        Every few days, a <em>Purge</em> removes the lowest-scoring nodes.
-        Your goal is to survive until the 13th Purge.
-        Use your limited budget to form connections with the right people—those who lift you up, not drag you down.
+        <strong>Motivation:</strong><br/>
+        You are just one node in a vast, living network. Your goal is simple: survive.
+        <br/><br/>
+        By connecting with the right people, you lift yourself up. By ignoring the wrong ones, you stay safe.
+        The world will shift, shocks will ripple, and purges will come. Can you make it to the end?
       </div>
 
       <form id="configForm" class="config-grid" autocomplete="off">
@@ -117,6 +118,10 @@
           <canvas id="networkCanvas"></canvas>
           <div class="viz-overlay">
             <div id="vizStatus" class="viz-status">Network Stable</div>
+            <div id="progressContainer" class="progress-container hidden">
+                <div class="progress-label">Purge Progress <span id="progressText">0/13</span></div>
+                <div class="progress-track"><div id="progressBar" class="progress-fill" style="width: 0%"></div></div>
+            </div>
           </div>
           <div id="nodeTooltip" class="node-tooltip hidden"></div>
         </div>

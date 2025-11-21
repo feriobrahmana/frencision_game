@@ -415,6 +415,7 @@ export function createGameEngine() {
       friends: neighbors(state.graph, state.youId).length,
       gameOver: state.gameOver,
       purgeCount: state.purgeCount,
+      maxPurges: PURGE_FINAL_LIMIT,
       friendBudget: state.budget,
     };
   }

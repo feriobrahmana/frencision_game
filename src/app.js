@@ -15,6 +15,10 @@ const elChoices = document.getElementById('choices');
 const elStats = document.getElementById('statsBar');
 const elNotice = document.getElementById('notice');
 const elVizStatus = document.getElementById('vizStatus');
+const elProgressContainer = document.getElementById('progressContainer');
+const elProgressText = document.getElementById('progressText');
+const elProgressBar = document.getElementById('progressBar');
+
 const canvas = document.getElementById('networkCanvas');
 const elCensusBody = document.getElementById('censusBody');
 const elNodeTooltip = document.getElementById('nodeTooltip');
@@ -28,6 +32,7 @@ const btnRestart = document.getElementById('btnRestart');
 const form = document.getElementById('configForm');
 const btnStart = document.getElementById('btnStart');
 const btnTheme = document.getElementById('btnTheme');
+const btnLobbyTheme = document.getElementById('btnLobbyTheme');
 
 // Visualization State
 let renderer = null;
@@ -40,10 +45,14 @@ function toggleTheme() {
   const html = document.documentElement;
   const isLight = html.getAttribute('data-theme') === 'light';
   html.setAttribute('data-theme', isLight ? 'dark' : 'light');
-  btnTheme.textContent = isLight ? '☀' : '☾';
+
+  const icon = isLight ? '☀' : '☾';
+  btnTheme.textContent = icon;
+  if (btnLobbyTheme) btnLobbyTheme.textContent = icon;
 }
 
 btnTheme.addEventListener('click', toggleTheme);
+if (btnLobbyTheme) btnLobbyTheme.addEventListener('click', toggleTheme);
 
 function readParams() {
   const formData = new FormData(form);
@@ -163,9 +172,20 @@ function renderStats(snapshot) {
   if (snapshot.gameOver) {
     elVizStatus.textContent = "SIGNAL LOST";
     elVizStatus.style.color = "var(--danger)";
+    elProgressContainer.classList.add('hidden');
   } else {
     elVizStatus.textContent = `Signal Active · ${snapshot.friends} connections`;
     elVizStatus.style.color = "var(--success)";
+
+    // Progress Bar Logic
+    if (snapshot.maxPurges > 0) {
+        elProgressContainer.classList.remove('hidden');
+        const current = snapshot.purgeCount || 0;
+        const max = snapshot.maxPurges;
+        elProgressText.textContent = `${current}/${max}`;
+        const perc = Math.min(100, (current / max) * 100);
+        elProgressBar.style.width = `${perc}%`;
+    }
   }
 }
 
