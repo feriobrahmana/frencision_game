@@ -353,8 +353,9 @@ canvas#networkCanvas { display: block; width: 100%; height: 100%; }
 .controls-container {
   background: var(--bg-panel);
   border-top: 1px solid var(--bg-surface);
-  padding: 20px; min-height: 180px;
+  padding: 20px; min-height: 180px; max-height: 50vh;
   display: flex; flex-direction: column; gap: 12px;
+  overflow-y: auto;
   transition: background 0.3s, border 0.3s;
 }
 
