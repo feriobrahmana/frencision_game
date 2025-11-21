@@ -2,6 +2,7 @@ import { createGameEngine } from './engine.js';
 import { createRenderer } from './rendering.js';
 import { layoutGraph } from './layout.js';
 import { clamp } from './helpers.js';
+import { neighbors } from './graph.js';
 
 const engine = createGameEngine();
 
@@ -14,6 +15,7 @@ const elStats = document.getElementById('statsBar');
 const elNotice = document.getElementById('notice');
 const elVizStatus = document.getElementById('vizStatus');
 const canvas = document.getElementById('networkCanvas');
+const elCensusBody = document.getElementById('censusBody');
 
 const form = document.getElementById('configForm');
 const btnStart = document.getElementById('btnStart');
@@ -51,6 +53,58 @@ function readParams() {
     purgePeriod: toInt('purgePeriod', 2, 30, 10),
     budgetMax: toInt('budgetMax', 0, 50, 10),
   };
+}
+
+// --- DATA TABLE LOGIC ---
+function renderCensus(state) {
+  elCensusBody.innerHTML = '';
+
+  const nodes = [...state.graph.nodes.values()].sort((a, b) => a.id - b.id);
+
+  for (const node of nodes) {
+    const tr = document.createElement('tr');
+    tr.id = `row-node-${node.id}`;
+    if (node.id === state.youId) tr.classList.add('row-you');
+
+    // Interaction Sync (Table -> Graph)
+    tr.onmouseenter = () => renderer.setHovered(node.id);
+    tr.onmouseleave = () => renderer.setHovered(null);
+
+    const friendCount = neighbors(state.graph, node.id).length;
+    const icon = node.category === 'The Privileged' ? '⬢' : (node.category === 'The Stable' ? '■' : '●');
+
+    tr.innerHTML = `
+      <td class="col-id">#${node.id}</td>
+      <td class="col-caste" title="${node.category}">${icon} ${node.category.replace('The ', '')}</td>
+      <td class="col-job">${node.job || 'Unknown'}</td>
+      <td class="col-score">${node.score.toFixed(1)}</td>
+      <td class="col-friends">${friendCount}</td>
+    `;
+    elCensusBody.appendChild(tr);
+  }
+}
+
+function highlightCensusRows(activeId, friendIds) {
+  // Clear previous highlights
+  for (const row of elCensusBody.children) {
+    row.classList.remove('row-active');
+    row.classList.remove('row-friend');
+  }
+
+  if (activeId === null) return;
+
+  const activeRow = document.getElementById(`row-node-${activeId}`);
+  if (activeRow) {
+      activeRow.classList.add('row-active');
+      activeRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  if (friendIds) {
+    for (const fid of friendIds) {
+      const fRow = document.getElementById(`row-node-${fid}`);
+      if (fRow) fRow.classList.add('row-friend');
+    }
+  }
 }
 
 // --- RENDERING LOGIC ---
@@ -199,6 +253,7 @@ function renderAll(update) {
   renderLog(update.events || engine.getLog());
   renderStats(update.snapshot);
   renderPrompt(update.prompt);
+  renderCensus(engine.getRawState());
 }
 
 // --- INTERACTION HANDLERS ---
@@ -211,6 +266,15 @@ function handleCanvasMove(e) {
 
     const hitId = renderer.getHitNode(x, y);
     renderer.setHovered(hitId);
+
+    // Census Highlighting
+    if (hitId !== null) {
+       const state = engine.getRawState();
+       const friendIds = neighbors(state.graph, hitId);
+       highlightCensusRows(hitId, friendIds);
+    } else {
+       highlightCensusRows(null, null);
+    }
 
     // Optional cursor change
     canvas.style.cursor = (hitId !== null && pendingPickOptions && pendingPickOptions.has(hitId))
