@@ -14,46 +14,83 @@
       <header class="lobby-header">
         <h1>Long Friendship</h1>
         <p>
-          Survive the purges. Rise in standing.<br/>
-          A network survival story.
+          You are a node in a shifting network. <br/>
+          To survive, you must maintain a high score to avoid being purged.<br/>
+          Connect with high-score nodes to boost your own standing, but beware of Shocks that ripple through connections.
         </p>
       </header>
 
+      <div class="lobby-intro" style="margin-bottom: 24px; font-size: 13px; color: var(--text-dim); line-height: 1.6; border-bottom: 1px solid var(--bg-surface); padding-bottom: 20px;">
+        <strong>Mission Briefing:</strong><br/>
+        Every few days, a <em>Purge</em> removes the lowest-scoring nodes.
+        Your goal is to survive until the 13th Purge.
+        Use your limited budget to form connections with the right people—those who lift you up, not drag you down.
+      </div>
+
       <form id="configForm" class="config-grid" autocomplete="off">
         <div class="config-group">
-          <label>
-            <span>Max Newcomers / Day</span>
+          <label title="Maximum number of new nodes entering the network each day. Higher means more chaos and opportunity.">
+            <span>Newcomers / Day</span>
             <input type="number" name="zMax" min="0" max="10" value="5" />
+            <small style="font-size: 10px; color: var(--text-dim); text-transform: none; display: block; margin-top: 4px;">Chaos Factor</small>
           </label>
-          <label>
-            <span>Edges / Newcomer</span>
+          <label title="How many existing nodes each newcomer connects to instantly.">
+            <span>Initial Connections</span>
             <input type="number" name="edgesPerNode" min="0" max="5" value="2" />
+            <small style="font-size: 10px; color: var(--text-dim); text-transform: none; display: block; margin-top: 4px;">Network Density</small>
           </label>
         </div>
         <div class="config-group">
-          <label>
-            <span>Invitation Period (Days)</span>
+          <label title="How often you can spend budget to invite a new friend.">
+            <span>Invitation Frequency</span>
             <input type="number" name="pickPeriod" min="1" max="20" value="7" />
+            <small style="font-size: 10px; color: var(--text-dim); text-transform: none; display: block; margin-top: 4px;">Days between picks</small>
           </label>
-          <label>
-            <span>Shock Period (Days)</span>
+          <label title="How often random events (good or bad) ripple through the network.">
+            <span>Volatility</span>
             <input type="number" name="shockPeriod" min="2" max="30" value="3" />
+            <small style="font-size: 10px; color: var(--text-dim); text-transform: none; display: block; margin-top: 4px;">Days between shocks</small>
           </label>
         </div>
         <div class="config-group">
-          <label>
-            <span>Purge Period (Days)</span>
+          <label title="The Judgment Day. Nodes below the threshold are removed.">
+            <span>Purge Frequency</span>
             <input type="number" name="purgePeriod" min="2" max="30" value="10" />
+            <small style="font-size: 10px; color: var(--text-dim); text-transform: none; display: block; margin-top: 4px;">Days between purges</small>
           </label>
-          <label>
-            <span>Friend Budget</span>
+          <label title="Total number of connections you can initiate in a lifetime.">
+            <span>Social Battery</span>
             <input type="number" name="budgetMax" min="0" max="50" value="10" />
+            <small style="font-size: 10px; color: var(--text-dim); text-transform: none; display: block; margin-top: 4px;">Max Invites</small>
           </label>
         </div>
         <div class="form-actions">
           <button type="button" id="btnStart" class="btn btn-xl btn-primary">Initialize Network</button>
         </div>
       </form>
+    </div>
+  </section>
+
+  <!-- GAME OVER SCREEN -->
+  <section id="viewGameOver" class="view-lobby hidden">
+    <div class="lobby-card" style="text-align: center;">
+      <header class="lobby-header">
+        <h1 id="gameOverTitle" style="color: var(--accent);">Game Over</h1>
+        <p id="gameOverBody" style="font-size: 16px; margin-bottom: 24px;">
+          <!-- Populated by JS -->
+        </p>
+      </header>
+
+      <div class="lobby-intro" style="background: var(--bg-dark); padding: 20px; border-radius: var(--radius-md); margin-bottom: 32px; text-align: left;">
+        <strong style="color: var(--text-muted); display: block; margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Network Analysis</strong>
+        <div id="gameOverStats" style="font-family: var(--font-mono); font-size: 13px; color: var(--text-main);">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" id="btnRestart" class="btn btn-xl btn-primary">Initialize New Run</button>
+      </div>
     </div>
   </section>
 

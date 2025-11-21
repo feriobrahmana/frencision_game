@@ -431,6 +431,8 @@ export function createGameEngine() {
     state.waitingFor = 'start';
     state.dayStarted = false;
     state.gameOver = false;
+    state.gameOverReason = null;
+    state.gameOverText = null;
     state.lastShock = null;
     state.lastPurge = null;
     state.purgeCount = 0;
@@ -478,7 +480,12 @@ export function createGameEngine() {
       };
     }
     if (state.gameOver) {
-      return { type: 'game-over', message: story[story.length - 1] ?? 'Game over.' };
+      return {
+        type: 'game-over',
+        title: state.gameOverReason || 'Game Over',
+        body: state.gameOverText || (story[story.length - 1] ?? 'Game over.'),
+        stats: formatFriendSummary(state),
+      };
     }
     if (state.waitingFor === 'continue') {
       return { type: 'continue', label: 'Continue to next day' };
@@ -575,7 +582,9 @@ export function createGameEngine() {
     const youNode = state.graph.nodes.get(state.youId);
     if (!youNode) {
       state.gameOver = true;
-      log('You were erased before the final reckoning. Your story ends nameless.');
+      state.gameOverReason = 'Erased from History';
+      state.gameOverText = 'You were erased before the final reckoning. Your story ends nameless.';
+      log(state.gameOverText);
       return true;
     }
     let maxScore = -Infinity;
@@ -584,16 +593,24 @@ export function createGameEngine() {
     }
     if (youNode.score >= maxScore) {
       state.gameOver = true;
-      log('The thirteenth purge froze the world in place. You stood tallest among those who endured.');
+      state.gameOverReason = 'Victory: The Highest Peak';
+      state.gameOverText = 'The thirteenth purge froze the world in place. You stood tallest among those who endured.';
+      log(state.gameOverText);
     } else if (state.youCaste === 'The Privileged') {
       state.gameOver = true;
-      log('You weathered every purge, but another claimed the final throne. Even privilege has ceilings.');
+      state.gameOverReason = 'Victory: A Gilded Cage';
+      state.gameOverText = 'You weathered every purge, but another claimed the final throne. Even privilege has ceilings.';
+      log(state.gameOverText);
     } else if (state.youCaste === 'The Stable') {
       state.gameOver = true;
-      log('The world cooled after thirteen purges. You survived, steady if unremarkable.');
+      state.gameOverReason = 'Survival: The Middle Path';
+      state.gameOverText = 'The world cooled after thirteen purges. You survived, steady if unremarkable.';
+      log(state.gameOverText);
     } else {
       state.gameOver = true;
-      log('Thirteen purges later, you remain—scarred, humbled, but alive among the Poor.');
+      state.gameOverReason = 'Survival: From the Ashes';
+      state.gameOverText = 'Thirteen purges later, you remain—scarred, humbled, but alive among the Poor.';
+      log(state.gameOverText);
     }
     if (state.gameOver) {
       log(formatFriendSummary(state));
@@ -639,7 +656,9 @@ export function createGameEngine() {
       log(purgeSummary);
       if (result.youRemoved) {
         state.gameOver = true;
-        log('You are forgotten. The story closes abruptly.');
+        state.gameOverReason = 'Purged';
+        state.gameOverText = 'You are forgotten. The story closes abruptly.';
+        log(state.gameOverText);
         log(formatFriendSummary(state));
         return {
           events: story.slice(),
