@@ -594,22 +594,22 @@ export function createGameEngine() {
     }
     if (youNode.score >= maxScore) {
       state.gameOver = true;
-      state.gameOverReason = 'Victory: The Highest Peak';
+      state.gameOverReason = `Victory (${state.youCaste}): The Highest Peak`;
       state.gameOverText = 'The thirteenth purge froze the world in place. You stood tallest among those who endured.';
       log(state.gameOverText);
     } else if (state.youCaste === 'The Privileged') {
       state.gameOver = true;
-      state.gameOverReason = 'Victory: A Gilded Cage';
+      state.gameOverReason = 'Victory (Privileged): A Gilded Cage';
       state.gameOverText = 'You weathered every purge, but another claimed the final throne. Even privilege has ceilings.';
       log(state.gameOverText);
     } else if (state.youCaste === 'The Stable') {
       state.gameOver = true;
-      state.gameOverReason = 'Survival: The Middle Path';
+      state.gameOverReason = 'Survival (Stable): The Middle Path';
       state.gameOverText = 'The world cooled after thirteen purges. You survived, steady if unremarkable.';
       log(state.gameOverText);
     } else {
       state.gameOver = true;
-      state.gameOverReason = 'Survival: From the Ashes';
+      state.gameOverReason = 'Survival (Poor): From the Ashes';
       state.gameOverText = 'Thirteen purges later, you remain—scarred, humbled, but alive among the Poor.';
       log(state.gameOverText);
     }
