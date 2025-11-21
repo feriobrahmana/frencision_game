@@ -9,6 +9,7 @@ const engine = createGameEngine();
 // UI Elements
 const viewLobby = document.getElementById('viewLobby');
 const viewGame = document.getElementById('viewGame');
+const viewGameOver = document.getElementById('viewGameOver');
 const elLog = document.getElementById('log');
 const elChoices = document.getElementById('choices');
 const elStats = document.getElementById('statsBar');
@@ -17,6 +18,12 @@ const elVizStatus = document.getElementById('vizStatus');
 const canvas = document.getElementById('networkCanvas');
 const elCensusBody = document.getElementById('censusBody');
 const elNodeTooltip = document.getElementById('nodeTooltip');
+
+// Game Over UI
+const elGameOverTitle = document.getElementById('gameOverTitle');
+const elGameOverBody = document.getElementById('gameOverBody');
+const elGameOverStats = document.getElementById('gameOverStats');
+const btnRestart = document.getElementById('btnRestart');
 
 const form = document.getElementById('configForm');
 const btnStart = document.getElementById('btnStart');
@@ -243,12 +250,15 @@ function renderPrompt(prompt) {
       break;
 
     case 'game-over':
-      if (elNotice) elNotice.textContent = prompt.message;
-      attachButton('Initialize New Run', () => {
-        viewLobby.classList.remove('hidden');
-        viewGame.classList.add('hidden');
-        isGameRunning = false;
-      }, { variant: 'primary' });
+      // Instead of buttons, we switch view
+      isGameRunning = false;
+
+      elGameOverTitle.textContent = prompt.title;
+      elGameOverBody.textContent = prompt.body;
+      elGameOverStats.textContent = prompt.stats;
+
+      viewGame.classList.add('hidden');
+      viewGameOver.classList.remove('hidden');
       break;
   }
 }
@@ -376,6 +386,7 @@ function startGame() {
 
   // UI Transition
   viewLobby.classList.add('hidden');
+  viewGameOver.classList.add('hidden');
   viewGame.classList.remove('hidden');
 
   // Start Engine
@@ -400,4 +411,10 @@ function startGame() {
 
 btnStart.addEventListener('click', () => {
   startGame();
+});
+
+btnRestart.addEventListener('click', () => {
+  viewGameOver.classList.add('hidden');
+  viewLobby.classList.remove('hidden');
+  isGameRunning = false;
 });
