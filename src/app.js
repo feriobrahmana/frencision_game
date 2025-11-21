@@ -43,13 +43,17 @@ let pendingPickOptions = null; // Store current options to map clicks to actions
 // Theme State
 function toggleTheme() {
   const html = document.documentElement;
-  const isLight = html.getAttribute('data-theme') === 'light';
-  html.setAttribute('data-theme', isLight ? 'dark' : 'light');
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
 
-  const icon = isLight ? '☀' : '☾';
+  const icon = isDark ? '☾' : '☀';
   btnTheme.textContent = icon;
   if (btnLobbyTheme) btnLobbyTheme.textContent = icon;
 }
+
+// Set initial icon (Default is Light, so next toggle is Dark -> Moon)
+btnTheme.textContent = '☾';
+if (btnLobbyTheme) btnLobbyTheme.textContent = '☾';
 
 btnTheme.addEventListener('click', toggleTheme);
 if (btnLobbyTheme) btnLobbyTheme.addEventListener('click', toggleTheme);
