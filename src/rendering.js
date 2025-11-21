@@ -2,76 +2,103 @@ const EXTRA_HIT_PAD = 8;
 
 export function createRenderer(canvas, state) {
   const ctx = canvas.getContext('2d');
+  let hoveredId = null;
+
+  function setHovered(id) {
+    hoveredId = id;
+  }
 
   function getNodeRadius(node) {
     return node.id === state.youId ? 12 : 8;
   }
 
-  function hitTest(event) {
-    const { left, top, width, height } = canvas.getBoundingClientRect();
-    const mx = event.clientX - left - width * 0.5;
-    const my = event.clientY - top - height * 0.5;
+  function getHitNode(x, y) {
+      let bestId = null;
+      let bestDist = Infinity;
 
-    let bestId = null;
-    let bestDist = Infinity;
-    for (const node of state.graph.nodes.values()) {
-      if (node.id === state.youId) continue;
-      const dx = mx - node.x;
-      const dy = my - node.y;
-      const radius = getNodeRadius(node) + EXTRA_HIT_PAD;
-      const dist = Math.hypot(dx, dy);
-      if (dist < radius && dist < bestDist) {
-        bestDist = dist;
-        bestId = node.id;
+      for (const node of state.graph.nodes.values()) {
+          // Distance Check
+          const dx = x - node.x;
+          const dy = y - node.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          const radius = getNodeRadius(node) + EXTRA_HIT_PAD;
+
+          if (dist <= radius && dist < bestDist) {
+              bestDist = dist;
+              bestId = node.id;
+          }
       }
-    }
-    return bestId;
+      return bestId;
+  }
+
+  function getCss(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#666';
   }
 
   function edgeColor(a, b) {
-    const base = getCss('--edge');
-    if (state.lastSplash && state.lastSplash.affected.has(a) && state.lastSplash.affected.has(b)) {
-      return state.lastSplash.kind === 'neg' ? '#fecaca' : '#d1fae5';
+    const shock = state.lastShock;
+
+    if (shock && shock.affected.has(a) && shock.affected.has(b)) {
+      return shock.kind === 'neg' ? getCss('--danger') : getCss('--success');
     }
-    return base;
+    return 'rgba(255, 255, 255, 0.15)';
   }
 
   function drawBadge(cx, cy, text) {
-    ctx.font = 'bold 11px ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial';
-    const padX = 5;
+    ctx.font = 'bold 11px "Inter", sans-serif';
     const metrics = ctx.measureText(text);
-    const width = Math.ceil(metrics.width) + padX * 2;
-    const height = 14;
+    const width = metrics.width + 10;
+    const height = 16;
     const x = cx - width / 2;
     const y = cy - height / 2;
-    const radius = 6;
+    const radius = 4;
+
     ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.arcTo(x + width, y, x + width, y + height, radius);
-    ctx.arcTo(x + width, y + height, x, y + height, radius);
-    ctx.arcTo(x, y + height, x, y, radius);
-    ctx.arcTo(x, y, x + width, y, radius);
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.roundRect(x, y, width, height, radius);
+    ctx.fillStyle = 'rgba(24, 24, 27, 0.9)';
     ctx.fill();
-    ctx.strokeStyle = '#e2e8f0';
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
     ctx.lineWidth = 1;
     ctx.stroke();
-    ctx.fillStyle = '#0f172a';
+
+    ctx.fillStyle = '#e4e4e7';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, cx, cy);
+    ctx.fillText(text, cx, cy + 1);
   }
 
   function drawNode(node) {
     const radius = getNodeRadius(node);
-    let fill = '#64748b';
-    if (node.id === state.youId) fill = pulse('#10b981', '#16a34a');
-    else if (state.friends.has(node.id)) fill = getCss('--accent');
 
-    if (state.lastPurgeSet && state.lastPurgeSet.has(node.id)) fill = getCss('--purge');
-    if (state.lastSplash) {
-      if (node.id === state.lastSplash.src) fill = getCss('--source');
-      else if (state.lastSplash.affected.has(node.id)) fill = state.lastSplash.kind === 'neg' ? getCss('--danger') : getCss('--pos');
+    // Base Colors
+    let fill = '#3f3f46'; // Zinc 700
+    let stroke = '#52525b'; // Zinc 600
+
+    // Context Colors
+    if (node.id === state.youId) {
+        fill = getCss('--accent');
+        stroke = getCss('--accent-hover');
+    } else if (state.friends.has(node.id)) {
+        fill = getCss('--success');
+        stroke = '#059669';
+    }
+
+    // Event Colors
+    if (state.lastShock) {
+       if (state.lastShock.src === node.id) {
+         fill = '#f59e0b'; // Source is Warning/Amber
+       } else if (state.lastShock.affected.has(node.id)) {
+         fill = state.lastShock.kind === 'neg' ? getCss('--danger') : getCss('--success');
+       }
+    }
+
+    // Highlight from Hover
+    if (hoveredId !== null && hoveredId === node.id) {
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, radius + 6, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.fill();
+      stroke = '#fff';
     }
 
     ctx.beginPath();
@@ -79,76 +106,33 @@ export function createRenderer(canvas, state) {
     ctx.fillStyle = fill;
     ctx.fill();
     ctx.lineWidth = 1.5;
-    ctx.strokeStyle = 'rgba(15,23,42,0.1)';
+    ctx.strokeStyle = stroke;
     ctx.stroke();
 
-    if (node.id !== state.youId) {
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = `rgba(15,23,42,${0.08 + 0.35 * node.friendly})`;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, radius - 3, -Math.PI * 0.15, Math.PI * 0.5);
-      ctx.stroke();
-    }
-
-    drawBadge(node.x, node.y - radius - 12, String(node.id));
-
-    if (state.showLabels && node.id !== state.youId) {
-      ctx.font = '10px ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = '#334155';
-      const lines = [
-        node.category || 'Unknown',
-        `f:${node.friendly.toFixed(2)} | s:${node.score.toFixed(1)}`,
-      ];
-      for (let i = 0; i < lines.length; i += 1) {
-        ctx.fillText(lines[i], node.x, node.y + radius + 2 + i * 12);
-      }
-    }
-
-    const canPick = state.picking && state.allowedPickIds && state.allowedPickIds.has(node.id);
-    if (canPick && node.id !== state.youId) {
-      ctx.lineWidth = 2.2;
-      ctx.strokeStyle = 'rgba(59,130,246,0.85)';
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, radius + EXTRA_HIT_PAD * 0.5, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    if (state.picking && node.id === state.hoveredId) {
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = 'rgba(37,99,235,0.85)';
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, radius + EXTRA_HIT_PAD * 0.6, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    if (state.lastPurgeSet && state.lastPurgeSet.has(node.id)) {
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = 'rgba(15,23,42,0.35)';
-      ctx.beginPath();
-      ctx.moveTo(node.x - radius + 2, node.y - radius + 2);
-      ctx.lineTo(node.x + radius - 2, node.y + radius - 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(node.x + radius - 2, node.y - radius + 2);
-      ctx.lineTo(node.x - radius + 2, node.y + radius - 2);
-      ctx.stroke();
-    }
+    // ID Badge
+    drawBadge(node.x, node.y - radius - 10, String(node.id));
   }
 
   function draw() {
     const ratio = window.devicePixelRatio || 1;
+
+    // Clear whole canvas
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.setTransform(ratio, 0, 0, ratio, canvas.width * 0.5, canvas.height * 0.5);
 
+    // Scale for high DPI, but DO NOT TRANSLATE origin.
+    // Layout engine produces coordinates in logical pixels (0..clientWidth, 0..clientHeight).
+    // So we just scale by ratio.
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+    // Edges
     ctx.lineWidth = 1;
     for (const key of state.graph.edges) {
       const [a, b] = key.split('-').map(Number);
       const A = state.graph.nodes.get(a);
       const B = state.graph.nodes.get(b);
       if (!A || !B) continue;
+
       ctx.strokeStyle = edgeColor(a, b);
       ctx.beginPath();
       ctx.moveTo(A.x, A.y);
@@ -156,11 +140,9 @@ export function createRenderer(canvas, state) {
       ctx.stroke();
     }
 
-    for (const node of state.graph.nodes.values()) drawNode(node);
-
-    if (state.lastSplash) {
-      state.lastSplash.ttl -= 1;
-      if (state.lastSplash.ttl <= 0) state.lastSplash = null;
+    // Nodes
+    for (const node of state.graph.nodes.values()) {
+      drawNode(node);
     }
   }
 
@@ -168,34 +150,8 @@ export function createRenderer(canvas, state) {
     const ratio = window.devicePixelRatio || 1;
     canvas.width = canvas.clientWidth * ratio;
     canvas.height = canvas.clientHeight * ratio;
-    ctx.setTransform(ratio, 0, 0, ratio, canvas.width * 0.5, canvas.height * 0.5);
     draw();
   }
 
-  function pulse(a, b) {
-    const t2 = (Date.now() * 0.003) % 2;
-    const mix = t2 < 1 ? t2 : 2 - t2;
-    const c1 = hex(a);
-    const c2 = hex(b);
-    const c = {
-      r: Math.round(c1.r * (1 - mix) + c2.r * mix),
-      g: Math.round(c1.g * (1 - mix) + c2.g * mix),
-      b: Math.round(c1.b * (1 - mix) + c2.b * mix),
-    };
-    return `rgb(${c.r},${c.g},${c.b})`;
-  }
-
-  function hex(value) {
-    const v = value.replace('#', '');
-    const num = parseInt(v, 16);
-    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
-  }
-
-  function getCss(name) {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  }
-
-  return { ctx, draw, resize, hitTest };
+  return { draw, resize, setHovered, getHitNode };
 }
-
-export { EXTRA_HIT_PAD };

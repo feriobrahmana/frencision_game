@@ -794,5 +794,7 @@ export function createGameEngine() {
     getLog: () => story.slice(),
     getSnapshot: snapshot,
     getPrompt: ensurePrompt,
+    getRawState: () => state,
+    getState: () => state,
   };
 }
