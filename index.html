@@ -74,11 +74,29 @@
     <!-- MAIN CONTENT SPLIT -->
     <div class="game-workspace">
 
-      <!-- LEFT: VISUALIZATION -->
-      <section class="viz-container">
-        <canvas id="networkCanvas"></canvas>
-        <div class="viz-overlay">
-          <div id="vizStatus" class="viz-status">Network Stable</div>
+      <!-- LEFT: VISUALIZATION & DATA -->
+      <section class="viz-column">
+        <div class="viz-container">
+          <canvas id="networkCanvas"></canvas>
+          <div class="viz-overlay">
+            <div id="vizStatus" class="viz-status">Network Stable</div>
+          </div>
+        </div>
+        <div class="census-panel">
+          <table id="censusTable" class="census-table">
+            <thead>
+              <tr>
+                <th class="col-id">ID</th>
+                <th class="col-caste">Caste</th>
+                <th class="col-job">Job</th>
+                <th class="col-score">Score</th>
+                <th class="col-friends">Friends</th>
+              </tr>
+            </thead>
+            <tbody id="censusBody">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
         </div>
       </section>
 
