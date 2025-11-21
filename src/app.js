@@ -16,6 +16,7 @@ const elNotice = document.getElementById('notice');
 const elVizStatus = document.getElementById('vizStatus');
 const canvas = document.getElementById('networkCanvas');
 const elCensusBody = document.getElementById('censusBody');
+const elNodeTooltip = document.getElementById('nodeTooltip');
 
 const form = document.getElementById('configForm');
 const btnStart = document.getElementById('btnStart');
@@ -124,7 +125,10 @@ function renderLog(lines) {
     div.textContent = line;
     elLog.appendChild(div);
   }
-  elLog.scrollTop = elLog.scrollHeight;
+  // Scroll the parent container to bottom
+  requestAnimationFrame(() => {
+    elLog.parentElement.scrollTop = elLog.parentElement.scrollHeight;
+  });
 }
 
 function renderStats(snapshot) {
@@ -258,6 +262,64 @@ function renderAll(update) {
 
 // --- INTERACTION HANDLERS ---
 
+function renderTooltip(nodeId, x, y) {
+  if (nodeId === null) {
+    elNodeTooltip.classList.add('hidden');
+    return;
+  }
+
+  const state = engine.getRawState();
+  const node = state.graph.nodes.get(nodeId);
+  if (!node) return;
+
+  const friendIds = neighbors(state.graph, nodeId);
+
+  // Sort friends by score high to low
+  const friendsData = friendIds
+    .map(id => state.graph.nodes.get(id))
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score);
+
+  const icon = node.category === 'The Privileged' ? '⬢' : (node.category === 'The Stable' ? '■' : '●');
+
+  let friendsHtml = '<div class="friends-header">Connections</div>';
+  if (friendsData.length === 0) {
+    friendsHtml += '<div class="friend-item"><em>No connections</em></div>';
+  } else {
+    // Show top 8 friends max to keep it pretty
+    for (const f of friendsData.slice(0, 8)) {
+      friendsHtml += `
+        <div class="friend-item">
+          <span>#${f.id} ${f.job || 'Unknown'}</span>
+          <span class="score">${f.score.toFixed(1)}</span>
+        </div>
+      `;
+    }
+    if (friendsData.length > 8) {
+       friendsHtml += `<div class="friend-item" style="justify-content:center; opacity:0.5;">+ ${friendsData.length - 8} more</div>`;
+    }
+  }
+
+  elNodeTooltip.innerHTML = `
+    <h4>
+      ${icon} ${node.job || 'Unknown'}
+      <span>#${node.id}</span>
+    </h4>
+    <div class="tooltip-stats">
+      <div>Caste <strong>${node.category}</strong></div>
+      <div>Score <strong>${node.score.toFixed(1)}</strong></div>
+    </div>
+    <div class="friends-list">
+      ${friendsHtml}
+    </div>
+  `;
+
+  // Position
+  elNodeTooltip.style.left = `${x}px`;
+  elNodeTooltip.style.top = `${y}px`;
+  elNodeTooltip.classList.remove('hidden');
+}
+
 function handleCanvasMove(e) {
     if (!renderer) return;
     const rect = canvas.getBoundingClientRect();
@@ -267,14 +329,8 @@ function handleCanvasMove(e) {
     const hitId = renderer.getHitNode(x, y);
     renderer.setHovered(hitId);
 
-    // Census Highlighting
-    if (hitId !== null) {
-       const state = engine.getRawState();
-       const friendIds = neighbors(state.graph, hitId);
-       highlightCensusRows(hitId, friendIds);
-    } else {
-       highlightCensusRows(null, null);
-    }
+    // Tooltip
+    renderTooltip(hitId, x, y);
 
     // Optional cursor change
     canvas.style.cursor = (hitId !== null && pendingPickOptions && pendingPickOptions.has(hitId))
