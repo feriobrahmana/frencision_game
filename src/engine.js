@@ -311,7 +311,9 @@ function runCasteConnections(state, newcomerIds) {
           targets.add(reachId);
         }
 
-        targets.delete(state.youId);
+        if (sourceIsNewcomer) {
+          targets.delete(state.youId);
+        }
 
         if (targets.size > 0) {
           availableCastes.push({ caste, weight });
@@ -338,6 +340,12 @@ function runCasteConnections(state, newcomerIds) {
       if (addEdge(state.graph, node.id, targetId)) {
         created += 1;
         createdTotal += 1;
+        if (targetId === state.youId) {
+          state.friends.add(node.id);
+          recordFriendship(state, node.id);
+          const job = node.job || `#${node.id}`;
+          log(`You were approached by ${job} of the ${node.category}. They added you to their network.`);
+        }
       } else {
         const remaining = options.filter((id) => id !== targetId);
         if (remaining.length > 0) {
