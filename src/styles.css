@@ -182,6 +182,55 @@ canvas#networkCanvas { display: block; width: 100%; height: 100%; }
   padding: 4px 8px; border-radius: 4px;
 }
 
+.node-tooltip {
+  position: absolute;
+  top: 0; left: 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  padding: 12px;
+  min-width: 220px;
+  z-index: 50;
+  pointer-events: none; /* Let clicks pass through to canvas */
+  font-size: 13px;
+  color: var(--text-main);
+  transform: translate(16px, 16px); /* Offset from cursor */
+}
+
+.node-tooltip h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid var(--bg-surface);
+  padding-bottom: 6px;
+}
+.node-tooltip h4 span { font-weight: 400; color: var(--text-muted); font-size: 11px; margin-left: auto; font-family: var(--font-mono); }
+
+.node-tooltip .tooltip-stats {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.node-tooltip .tooltip-stats div { color: var(--text-muted); }
+.node-tooltip .tooltip-stats div strong { color: var(--text-main); display: block; font-size: 13px; }
+
+.node-tooltip .friends-list {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.node-tooltip .friends-header {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text-dim); margin-bottom: 4px; font-weight: 600;
+}
+.node-tooltip .friend-item {
+  display: flex; justify-content: space-between;
+  font-size: 12px; color: var(--text-muted);
+  padding: 3px 0; border-bottom: 1px solid var(--edge-default);
+}
+.node-tooltip .friend-item:last-child { border-bottom: none; }
+.node-tooltip .friend-item span.score { font-family: var(--font-mono); color: var(--text-dim); }
+
 /* CENSUS PANEL */
 .census-panel {
   height: 240px;
